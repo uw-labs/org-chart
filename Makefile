@@ -6,3 +6,13 @@ dev-frontend:
 
 build-frontend:
 	cd frontend && yarn build
+
+DOCKER_IMAGE=quay.io/utilitywarehouse/org-chart
+
+build-docker:
+	docker build -t $(DOCKER_IMAGE) .
+
+docker-push:
+	docker push $(DOCKER_IMAGE)
+
+build: build-frontend build-docker
