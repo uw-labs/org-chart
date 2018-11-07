@@ -161,8 +161,6 @@ export default class App extends React.Component {
 
     render() {
 
-        const persistURL = localStorage.getItem("persistURL")
-
         return (
             <MuiThemeProvider>
                 <Tabs initialSelectedIndex={0}>
