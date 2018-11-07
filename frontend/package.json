@@ -1,7 +1,6 @@
 {
-  "name": "org-chart",
+  "name": "@utilitywarehosue/org-chart",
   "version": "0.1.0",
-  "private": true,
   "dependencies": {
     "d3": "^4.13.0",
     "davenport": "^2.8.2",
@@ -20,5 +19,6 @@
     "build": "react-scripts build && mv build ..",
     "test": "react-scripts test --env=jsdom",
     "eject": "react-scripts eject"
-  }
+  },
+  "license": "MIT"
 }
