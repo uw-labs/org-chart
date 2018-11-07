@@ -6,7 +6,9 @@ export const STREAM = {
     ENGINEERING: 'ENGINEERING',
     OPERATIONS: 'OPERATIONS',
     PRODUCT: 'PRODUCT',
-    PORTFOLIO: 'PORTFOLIO'
+    PORTFOLIO: 'PORTFOLIO',
+    DATA: 'DATA',
+    DESIGN: 'DESIGN',
 }
 
 export const KIND = {
@@ -360,6 +362,23 @@ class Organisation {
         employee.number = employeeNumber
         employee.github = github
 
+    }
+
+    removeEmployee(id) {
+
+        this.employees.filter(e => e.reportsTo === id).forEach(e => {
+            e.reportsTo = undefined
+        })
+
+        this.teams.filter(t => t.techLead === id).forEach(t => {
+            t.techLead = undefined
+        })
+
+        this.teams.filter(t => t.productLead === id).forEach(t => {
+            t.productLead = undefined
+        })
+
+        this.employees = this.employees.filter(e => e.id !== id)
     }
 
     setTechLead(team, lead) {

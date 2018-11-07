@@ -1,7 +1,7 @@
 install:
 	cd frontend && yarn install
 
-run:
+dev-frontend:
 	cd frontend && yarn start
 
 build-frontend:

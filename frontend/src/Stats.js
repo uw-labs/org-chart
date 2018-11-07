@@ -1,7 +1,7 @@
 import React from 'react'
 import {Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis} from 'recharts'
 
-import {flattenTeamHierarchyExcluding} from './state'
+import {STREAM, flattenTeamHierarchyExcluding} from './state'
 
 export default class Stats extends React.Component {
     render() {
@@ -19,6 +19,8 @@ export default class Stats extends React.Component {
                 <div><h3>Totals</h3><TwoLevelPieChart teams={teamsFlat}/></div>
                 <div><h3>Engineering</h3><StackedBarChart teams={teamsFlat} engineering title={"Engineering"}/></div>
                 <div><h3>Product</h3><StackedBarChart teams={teamsFlat} product/></div>
+                <div><h3>Design</h3><StackedBarChart teams={teamsFlat} design/></div>
+                <div><h3>Data</h3><StackedBarChart teams={teamsFlat} data/></div>
                 <div><h3>Operations</h3><StackedBarChart teams={teamsFlat} operations/></div>
             </div>
 
@@ -26,25 +28,31 @@ export default class Stats extends React.Component {
     }
 }
 
-function filterMembers({engineering, operations, portfolio, product}) {
+function filterMembers({engineering, operations, portfolio, product, data, design}) {
     return member => {
-        if (engineering && member.stream === 'ENGINEERING') {
+        if (engineering && member.stream === STREAM.ENGINEERING) {
             return true
         }
-        if (operations && member.stream === 'OPERATIONS') {
+        if (operations && member.stream === STREAM.OPERATIONS) {
             return true
         }
-        if (portfolio && member.stream === 'PORTFOLIO') {
+        if (portfolio && member.stream === STREAM.PORTFOLIO) {
             return true
         }
-        if (product && member.stream === 'PRODUCT') {
+        if (product && member.stream === STREAM.PRODUCT) {
+            return true
+        }
+        if (data && member.stream === STREAM.DATA) {
+            return true
+        }
+        if (design && member.stream === STREAM.DESIGN) {
             return true
         }
         return false
     }
 }
 
-function countVacancies(vacancies, {engineering, operations, portfolio, product}) {
+function countVacancies(vacancies, {engineering, operations, portfolio, product, data, design}) {
 
     let tally = 0
 
@@ -64,19 +72,25 @@ function countVacancies(vacancies, {engineering, operations, portfolio, product}
     if (product && vacancies['PRODUCT']) {
         tally += vacancies['PRODUCT']
     }
+    if (data && vacancies['DATA']) {
+        tally += vacancies['DATA']
+    }
+    if (design && vacancies['DESIGN']) {
+        tally += vacancies['DESIGN']
+    }
     if (isNaN(tally)) {
         console.log(tally, vacancies)
     }
     return tally
 }
 
-const StackedBarChart = ({teams, engineering, operations, portfolio, product, title}) => {
+const StackedBarChart = ({teams, engineering, operations, portfolio, product, data, design, title}) => {
 
-    const memberFilter = filterMembers({engineering, operations, portfolio, product})
+    const memberFilter = filterMembers({engineering, operations, portfolio, product, data, design})
 
-    const data = teams.map(t => {
+    const datas = teams.map(t => {
         const members = t.members.filter(memberFilter).length
-        const vacancies = countVacancies(t.vacancies, {engineering, operations, portfolio, product})
+        const vacancies = countVacancies(t.vacancies, {engineering, operations, portfolio, product, data, design})
 
         if (t.name === "Technology Department" || (!vacancies && !members)) {
             return null
@@ -88,7 +102,7 @@ const StackedBarChart = ({teams, engineering, operations, portfolio, product, ti
 
     return (
         <ResponsiveContainer width={"100%"} minHeight={200}>
-            <BarChart data={data}>
+            <BarChart data={datas}>
                 <XAxis dataKey="name"></XAxis>
                 <YAxis/>
                 <CartesianGrid/>
@@ -103,12 +117,11 @@ const StackedBarChart = ({teams, engineering, operations, portfolio, product, ti
 
 const TwoLevelPieChart = ({teams}) => {
 
-    const streams = {
-        ENGINEERING: {employees: 0, vacancies: 0},
-        PRODUCT: {employees: 0, vacancies: 0},
-        PORTFOLIO: {employees: 0, vacancies: 0},
-        OPERATIONS: {employees: 0, vacancies: 0},
-    }
+    const streams = {}
+
+    Object.keys(STREAM).forEach(st => {
+        streams[st] = {employees: 0, vacancies: 0}
+    })
 
     let max = 0
 
@@ -125,12 +138,11 @@ const TwoLevelPieChart = ({teams}) => {
         })
     })
 
-    const data = [
-        {stream: "engineering", ...streams.ENGINEERING},
-        {stream: "portfolio", ...streams.PORTFOLIO},
-        {stream: "product", ...streams.PRODUCT},
-        {stream: "operations", ...streams.OPERATIONS}
-    ]
+    const data = []
+
+    Object.keys(streams).forEach(st => {
+        data.push({stream: st, ...streams[st]})
+    })
 
     return (
         <ResponsiveContainer width={"100%"} minHeight={200}>

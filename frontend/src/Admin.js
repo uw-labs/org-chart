@@ -82,6 +82,7 @@ export default class Admin extends React.Component {
                         teams={[this.props.data.get('teams').toJS()].reduce(flattenTeamHierarchyExcluding(), [])}
                         addEmployee={this.props.actions.addEmployee}
                         editEmployee={this.props.actions.editEmployee}
+                        removeEmployee={this.props.actions.removeEmployee}
                     />
                 </Box>
             </Flex>
@@ -153,7 +154,7 @@ class TeamDetails extends React.Component {
         } else if (upstreamEmlpoyeesStreams.indexOf(STREAM.OPERATIONS) !== -1) {
             upstreamEmlpoyeesStreams = [STREAM.OPERATIONS]
         } else {
-            upstreamEmlpoyeesStreams = [STREAM.ENGINEERING, STREAM.PRODUCT]
+            upstreamEmlpoyeesStreams = [STREAM.ENGINEERING, STREAM.PRODUCT, STREAM.DATA, STREAM.DESIGN]
         }
 
         return (
@@ -181,7 +182,7 @@ class TeamDetails extends React.Component {
                 </SelectField>
                 <Flex p={0}>
                     {[...new Set(Object.keys(team.vacancies).concat(upstreamEmlpoyeesStreams))].map(s => (
-                        <Box pb={0} w={1 / 3} style={{alignSelf: "flex-start"}} key={`vacancies_${s}`}>
+                        <Box pb={0} w={1 / 4} style={{alignSelf: "flex-start"}} key={`vacancies_${s}`}>
                             <TextField onChange={(_, val) => changeHeadcount(team.id, s, val)}
                                        floatingLabelText={s.toLowerCase()}
                                        value={team.vacancies[s] !== undefined ? team.vacancies[s] : ""}/>
@@ -334,7 +335,7 @@ class EmployeeList extends React.Component {
                 </List>
                 <AddPersonDialog open={this.state.addPersonOpen} person={this.state.editedPerson} afterClose={() => {
                     this.setState({addPersonOpen: false, editedPerson: null} )
-                }} addEmployee={this.props.addEmployee} editEmployee={this.props.editEmployee} employees={employees} />
+                }} addEmployee={this.props.addEmployee} editEmployee={this.props.editEmployee} removeEmployee={this.props.removeEmployee} employees={employees} />
             </div>
         )
     }
@@ -392,6 +393,24 @@ class AddPersonDialog extends React.Component {
         this.handleClose()
     }
 
+    delete = () => {
+
+        const {id} = this.state
+
+        if (!id) {
+            return this.handleClose()
+        }
+
+        const go = window.confirm("Really, but like... really really?")
+
+        if (go) {
+            this.props.removeEmployee(id)
+        }
+
+        return this.handleClose()
+
+    }
+
     render() {
         const actions = [
             <FlatButton
@@ -443,6 +462,14 @@ class AddPersonDialog extends React.Component {
                         label={STREAM.PRODUCT}
                     />
                     <RadioButton
+                        value={STREAM.DATA}
+                        label={STREAM.DATA}
+                    />
+                    <RadioButton
+                        value={STREAM.DESIGN}
+                        label={STREAM.DESIGN}
+                    />
+                    <RadioButton
                         value={STREAM.OPERATIONS}
                         label={STREAM.OPERATIONS}
                     />
@@ -464,6 +491,12 @@ class AddPersonDialog extends React.Component {
                         <MenuItem key={t.id} value={t.id} primaryText={t.name}/>
                     ))}
                 </SelectField>
+
+                <RaisedButtom
+                    label="DELETE"
+                    secondary={true}
+                    onClick={this.delete}
+                />
 
             </Dialog>
         )

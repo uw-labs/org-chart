@@ -149,6 +149,11 @@ export default class App extends React.Component {
         this.bang()
     }
 
+    removeEmployee = (id) => {
+        this.props.data.removeEmployee(id)
+        this.bang()
+    }
+
     setTechLead = (team, lead) => {
         this.props.data.setTechLead(team, lead)
         this.bang()
@@ -186,6 +191,7 @@ export default class App extends React.Component {
                                       removeTeam: this.removeTeam,
                                       addEmployee: this.addEmployee,
                                       editEmployee: this.editEmployee,
+                                      removeEmployee: this.removeEmployee,
                                       setTechLead: this.setTechLead,
                                       setProductLead: this.setProductLead,
                                   }}/>
