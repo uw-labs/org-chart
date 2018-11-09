@@ -1,11 +1,11 @@
 install:
-	cd frontend && yarn install
+	cd frontend && npm install
 
 dev-frontend:
-	cd frontend && yarn start
+	cd frontend && npm start
 
 build-frontend:
-	cd frontend && yarn build
+	cd frontend && npm build
 
 DOCKER_IMAGE=quay.io/utilitywarehouse/org-chart
 
