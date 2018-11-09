@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/davecgh/go-spew/spew"
 
 	"golang.org/x/oauth2"
 
@@ -54,6 +57,10 @@ func main() {
 					return errors.Wrap(err, "retrieving org chart data")
 				}
 
+				for _, t := range orgChart.Teams {
+					t.Github = fmt.Sprintf("%s%s", c.String("github-team-prefix"), strings.Replace(t.ID, "_", "-", -1))
+				}
+
 				gh, err := newGithubState(c.String("github-token"), c.String("github-org"), c.String("github-team-prefix"))
 
 				if err != nil {
@@ -64,11 +71,25 @@ func main() {
 					logrus.Infof("github user %s not found in orgchart", m.GetLogin())
 				}
 
-				for _, m := range employeeNotInGithub(orgChart, gh) {
+				for _, m := range employeesNotInGithub(orgChart, gh) {
 					logrus.Infof("employee %s (%s) not found in github, will be added", m.Name, m.Github)
 				}
 
+				for _, t := range githubTeamsNotInOrgchart(orgChart, gh) {
+					logrus.Infof("github team %s not found in orgchart, will be removed", t.GetName())
+				}
+
+				for _, m := range teamsNotInGithub(orgChart, gh) {
+					logrus.Infof("team %s (%s) not found in github, will be added", m.Name, m.Github)
+				}
+
 				result, err := gh.SyncTeams(orgChart)
+
+				if err != nil {
+					return errors.Wrap(err, "syncing teams")
+				}
+
+				spew.Dump(result)
 
 				/*
 
@@ -109,6 +130,7 @@ type Team struct {
 	Name        string
 	ParentID    string `json:"parent"`
 	Description string
+	Github      string
 }
 
 type OrgChart struct {
@@ -116,7 +138,7 @@ type OrgChart struct {
 	Teams     []*Team
 }
 
-func employeeNotInGithub(orgchart *OrgChart, gh *GithubState) []*Employee {
+func employeesNotInGithub(orgchart *OrgChart, gh *GithubState) []*Employee {
 
 	notInGithub := []*Employee{}
 
@@ -155,6 +177,49 @@ func githubMembersNotInOrgchart(orgchart *OrgChart, gh *GithubState) []*github.U
 		}
 		if !found {
 			notInOrgchart = append(notInOrgchart, ghMember)
+		}
+	}
+
+	return notInOrgchart
+}
+
+func teamsNotInGithub(orgchart *OrgChart, gh *GithubState) []*Team {
+
+	notInGithub := []*Team{}
+
+	for _, team := range orgchart.Teams {
+
+		found := false
+
+		for _, ghTeam := range gh.teams {
+			if team.Github == ghTeam.GetName() {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			notInGithub = append(notInGithub, team)
+		}
+	}
+
+	return notInGithub
+
+}
+
+func githubTeamsNotInOrgchart(orgchart *OrgChart, gh *GithubState) []*github.Team {
+	notInOrgchart := []*github.Team{}
+
+	for _, ghTeam := range gh.teams {
+		found := false
+		for _, team := range orgchart.Teams {
+			if team.Github == ghTeam.GetName() {
+				found = true
+				break
+			}
+		}
+		if !found {
+			notInOrgchart = append(notInOrgchart, ghTeam)
 		}
 	}
 
@@ -248,6 +313,8 @@ func (gh *GithubState) SyncTeams(chart *OrgChart) (error, error) {
 	// report back
 
 	// sort out members
+
+	return nil, nil
 
 }
 
