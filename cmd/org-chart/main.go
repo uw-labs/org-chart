@@ -63,11 +63,11 @@ func main() {
 
 				gh, err := newGithubState(c.String("github-token"), c.String("github-org"), c.String("github-team-prefix"))
 
-				gh.dry = true
-
 				if err != nil {
 					return errors.Wrap(err, "retrieving github data")
 				}
+
+				gh.dry = true
 
 				for _, m := range githubMembersNotInOrgchart(orgChart, gh) {
 					logrus.Infof("github user %s not found in orgchart", m.GetLogin())
@@ -297,7 +297,7 @@ func (gh *GithubState) AddMembers(member ...*github.User) {
 	gh.members = append(gh.members, member...)
 }
 
-func (gh *GithubState) createTeamIfNotExists(teamID string) error {
+func (gh *GithubState) createTeamByIDIfNotExists(teamID string) (*github.Team, error) {
 
 	var teamToCreate *Team
 
@@ -308,35 +308,38 @@ func (gh *GithubState) createTeamIfNotExists(teamID string) error {
 	}
 
 	if teamToCreate == nil {
-		return errors.Errorf("could not find org team %s for creation", teamID)
+		return nil, errors.Errorf("could not find org team %s for creation", teamID)
 	}
 
 	var parentID int64
 
 	if teamToCreate.ParentID != "" {
 
-		parentTeam, parentExists := gh.teams[teamToCreate.ParentID]
-
-		if !parentExists {
-
-			// RETURN NEW TEAM HERE!
-
-			err := gh.createTeamIfNotExists(teamToCreate.ParentID)
+		parentTeam, err := gh.createTeamByIDIfNotExists(teamToCreate.ParentID)
 
 			if err != nil {
-				return err
+				return nil, err
 			}
-		} else {
-			parentID = parentTeam.GetID()
-		}
+
+
+		parentID = parentTeam.GetID()
 
 	}
+
+
+	if preExistingTeam, ok := gh.teams[teamToCreate.Github]; ok {
+		return preExistingTeam, nil
+	}
+
+	spew.Dump(parentID)
 
 	// check if parent team exists, if not recurse and create it
 
 	// check if team exists, if yes, check parent and edit if parent different
 
 	// otherwise create team with parent
+
+	return nil
 
 }
 
