@@ -63,6 +63,8 @@ func main() {
 
 				gh, err := newGithubState(c.String("github-token"), c.String("github-org"), c.String("github-team-prefix"))
 
+				gh.dry = true
+
 				if err != nil {
 					return errors.Wrap(err, "retrieving github data")
 				}
@@ -90,20 +92,6 @@ func main() {
 				}
 
 				spew.Dump(result)
-
-				/*
-
-					for _, t := range ghTeams {
-						if ghTeamInOrgChart(orgChart, t, c.String("github-team-prefix")) == false {
-							logrus.Infof("github team %s not found in orgchart, will be removed", t.GetName())
-						}
-					}
-
-					err = syncTeamsInGithub(orgChart.Teams, ghTeams, "new-org", c.String("github-org"), ghClient)
-
-					if err != nil {
-						return errors.Wrap(err, "syncing teams to github")
-					}*/
 
 				return nil
 
@@ -285,12 +273,20 @@ func newGithubState(token, organisation, teamPrefix string) (*GithubState, error
 	return gh, nil
 }
 
+type githubSyncResult struct {
+	newTeams     map[string]*github.Team
+	removedTeams map[string]*github.Team
+}
+
 type GithubState struct {
 	organisation string
 	teamPrefix   string
 	client       *github.Client
 	teams        map[string]*github.Team
 	members      []*github.User
+	syncResult   *githubSyncResult
+	dry          bool
+	orgTeams     []*Team
 }
 
 func (gh *GithubState) AddTeam(team *github.Team) {
@@ -301,7 +297,65 @@ func (gh *GithubState) AddMembers(member ...*github.User) {
 	gh.members = append(gh.members, member...)
 }
 
-func (gh *GithubState) SyncTeams(chart *OrgChart) (error, error) {
+func (gh *GithubState) createTeamIfNotExists(teamID string) error {
+
+	var teamToCreate *Team
+
+	for _, team := range gh.orgTeams {
+		if team.ID == teamID {
+			teamToCreate = team
+		}
+	}
+
+	if teamToCreate == nil {
+		return errors.Errorf("could not find org team %s for creation", teamID)
+	}
+
+	var parentID int64
+
+	if teamToCreate.ParentID != "" {
+
+		parentTeam, parentExists := gh.teams[teamToCreate.ParentID]
+
+		if !parentExists {
+
+			// RETURN NEW TEAM HERE!
+
+			err := gh.createTeamIfNotExists(teamToCreate.ParentID)
+
+			if err != nil {
+				return err
+			}
+		} else {
+			parentID = parentTeam.GetID()
+		}
+
+	}
+
+	// check if parent team exists, if not recurse and create it
+
+	// check if team exists, if yes, check parent and edit if parent different
+
+	// otherwise create team with parent
+
+}
+
+func (gh *GithubState) SyncTeams(chart *OrgChart) (*githubSyncResult, error) {
+
+	gh.orgTeams = chart.Teams
+
+	gh.syncResult = &githubSyncResult{
+		make(map[string]*github.Team),
+		make(map[string]*github.Team),
+	}
+
+	for _, teamToCreate := range teamsNotInGithub(chart, gh) {
+		err := gh.createTeamByIDIfNotExists(teamToCreate.ID)
+
+		if err != nil {
+			return gh.syncResult, err
+		}
+	}
 
 	// find teams that are not in github
 	// find teams that shouldn't be in github
