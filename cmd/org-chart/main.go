@@ -7,8 +7,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/davecgh/go-spew/spew"
-
 	"golang.org/x/oauth2"
 
 	"github.com/sirupsen/logrus"
@@ -51,6 +49,8 @@ func main() {
 			},
 			Action: func(c *cli.Context) error {
 
+				//logrus.SetLevel(logrus.DebugLevel)
+
 				orgChart, err := loadOrgChartData(c.String("data-url"))
 
 				if err != nil {
@@ -67,7 +67,11 @@ func main() {
 					return errors.Wrap(err, "retrieving github data")
 				}
 
-				gh.dry = true
+				gh.dry = c.Bool("dry-run")
+
+				if gh.dry {
+					logrus.Info("running in DRY mode")
+				}
 
 				for _, m := range githubMembersNotInOrgchart(orgChart, gh) {
 					logrus.Infof("github user %s not found in orgchart", m.GetLogin())
@@ -91,7 +95,17 @@ func main() {
 					return errors.Wrap(err, "syncing teams")
 				}
 
-				spew.Dump(result)
+				for _, team := range result.removedTeams {
+					logrus.Infof("removed %s from github", team.GetName())
+				}
+
+				for _, employee := range result.unableToCreateMembership {
+					logrus.Infof("unable to add member %s to %s team, github handle not provided", employee.Name, employee.MemberOf)
+				}
+
+				for _, employee := range result.unableToCreateMaintainer {
+					logrus.Infof("unable to add maintainer %s to %s team, github handle not provided", employee.Name, employee.MemberOf)
+				}
 
 				return nil
 
@@ -108,22 +122,54 @@ func main() {
 }
 
 type Employee struct {
+	ID       string
 	Name     string
 	Github   string
 	MemberOf string
+	Team     *Team
 }
 
 type Team struct {
-	ID          string
-	Name        string
-	ParentID    string `json:"parent"`
-	Description string
-	Github      string
+	ID            string
+	Name          string
+	ParentID      string `json:"parent"`
+	Description   string
+	Github        string
+	TeachLeadID   string `json:"techLead"`
+	ProductLeadID string `json:"productLead"`
 }
 
 type OrgChart struct {
-	Employees []*Employee
-	Teams     []*Team
+	Employees     []*Employee
+	Teams         []*Team
+	TeamsByID     map[string]*Team
+	EmployeesByID map[string]*Employee
+}
+
+func (oc *OrgChart) organise() error {
+
+	oc.TeamsByID = make(map[string]*Team)
+	oc.EmployeesByID = make(map[string]*Employee)
+
+	for _, t := range oc.Teams {
+		oc.TeamsByID[t.ID] = t
+	}
+
+	for _, e := range oc.Employees {
+
+		oc.EmployeesByID[e.ID] = e
+
+		team, ok := oc.TeamsByID[e.MemberOf]
+
+		if !ok {
+			return errors.Errorf("could not find team %s for member %s", e.MemberOf, e.Name)
+		}
+
+		e.Team = team
+	}
+
+	return nil
+
 }
 
 func employeesNotInGithub(orgchart *OrgChart, gh *GithubState) []*Employee {
@@ -274,8 +320,9 @@ func newGithubState(token, organisation, teamPrefix string) (*GithubState, error
 }
 
 type githubSyncResult struct {
-	newTeams     map[string]*github.Team
-	removedTeams map[string]*github.Team
+	removedTeams             []*github.Team
+	unableToCreateMembership []*Employee
+	unableToCreateMaintainer []*Employee
 }
 
 type GithubState struct {
@@ -311,35 +358,173 @@ func (gh *GithubState) createTeamByIDIfNotExists(teamID string) (*github.Team, e
 		return nil, errors.Errorf("could not find org team %s for creation", teamID)
 	}
 
-	var parentID int64
+	var parentID *int64
 
 	if teamToCreate.ParentID != "" {
-
 		parentTeam, err := gh.createTeamByIDIfNotExists(teamToCreate.ParentID)
-
-			if err != nil {
-				return nil, err
-			}
-
-
-		parentID = parentTeam.GetID()
-
+		if err != nil {
+			return nil, err
+		}
+		parentID = parentTeam.ID
 	}
 
+	privacy := "closed"
+
+	ctx := context.Background()
 
 	if preExistingTeam, ok := gh.teams[teamToCreate.Github]; ok {
+		if parentTeam := preExistingTeam.GetParent(); parentTeam != nil {
+			if parentTeam.GetName() != teamToCreate.ParentID {
+
+				if !gh.dry {
+
+					editedTeam, _, err := gh.client.Teams.EditTeam(ctx, preExistingTeam.GetID(), github.NewTeam{
+						Name:         teamToCreate.Github,
+						Description:  &teamToCreate.Description,
+						ParentTeamID: parentID,
+						Privacy:      &privacy,
+					})
+
+					if err != nil {
+						return nil, errors.Wrap(err, "editing team")
+					}
+
+					gh.teams[editedTeam.GetName()] = editedTeam
+				}
+
+			}
+		}
 		return preExistingTeam, nil
 	}
 
-	spew.Dump(parentID)
+	var createdTeam *github.Team
 
-	// check if parent team exists, if not recurse and create it
+	if gh.dry {
+		createdTeam = &github.Team{
+			Name:        &teamToCreate.Github,
+			Description: &teamToCreate.Description,
+			Privacy:     &privacy,
+		}
+	} else {
 
-	// check if team exists, if yes, check parent and edit if parent different
+		var err error
 
-	// otherwise create team with parent
+		createdTeam, _, err = gh.client.Teams.CreateTeam(ctx, gh.organisation, github.NewTeam{
+			Name:         teamToCreate.Github,
+			Description:  &teamToCreate.Description,
+			ParentTeamID: parentID,
+			Privacy:      &privacy,
+		})
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	gh.teams[createdTeam.GetName()] = createdTeam
+
+	return createdTeam, nil
+
+}
+
+func (gh *GithubState) removeTeam(team *github.Team) error {
+
+	if !gh.dry {
+
+		_, err := gh.client.Teams.DeleteTeam(context.Background(), team.GetID())
+
+		if err != nil {
+			return nil
+		}
+
+	}
+
+	gh.syncResult.removedTeams = append(gh.syncResult.removedTeams, team)
+
+	delete(gh.teams, team.GetName())
 
 	return nil
+}
+
+type teamMembershipSync struct {
+	Maintainers []string
+	Members     []string
+}
+
+func teamMembersSyncData(chart *OrgChart, gh *GithubState) (map[*github.Team]*teamMembershipSync, error) {
+
+	memberSync := map[*github.Team]*teamMembershipSync{}
+
+	for _, e := range chart.Employees {
+
+		if e.Github == "" {
+			gh.syncResult.unableToCreateMembership = append(gh.syncResult.unableToCreateMembership, e)
+			continue
+		}
+
+		team, ok := gh.teams[e.Team.Github]
+
+		if !ok {
+			return nil, errors.Errorf("team %s not found in github", e.Team.Github)
+		}
+
+		if _, ok := memberSync[team]; !ok {
+			memberSync[team] = &teamMembershipSync{
+				Maintainers: []string{},
+				Members:     []string{},
+			}
+		}
+
+		memberSync[team].Members = append(memberSync[team].Members, e.Github)
+	}
+
+	for _, t := range chart.Teams {
+
+		team, ok := gh.teams[t.Github]
+
+		if !ok {
+			return nil, errors.Errorf("team %s not found in github", t.Github)
+		}
+
+		if _, ok := memberSync[team]; !ok {
+			memberSync[team] = &teamMembershipSync{
+				Maintainers: []string{},
+				Members:     []string{},
+			}
+		}
+
+		if t.TeachLeadID != "" {
+			techLead, ok := chart.EmployeesByID[t.TeachLeadID]
+
+			if !ok {
+				return nil, errors.Errorf("could not find tech lead %s for team %s", t.TeachLeadID, t.Name)
+			}
+
+			if techLead.Github == "" {
+				gh.syncResult.unableToCreateMaintainer = append(gh.syncResult.unableToCreateMaintainer, techLead)
+				continue
+			}
+
+			memberSync[team].Maintainers = append(memberSync[team].Maintainers, techLead.Github)
+		}
+
+		if t.ProductLeadID != "" {
+			productLead, ok := chart.EmployeesByID[t.ProductLeadID]
+
+			if !ok {
+				return nil, errors.Errorf("could not find product lead %s for team %s", t.TeachLeadID, t.Name)
+			}
+
+			if productLead.Github == "" {
+				gh.syncResult.unableToCreateMaintainer = append(gh.syncResult.unableToCreateMaintainer, productLead)
+				continue
+			}
+
+			memberSync[team].Maintainers = append(memberSync[team].Maintainers, productLead.Github)
+		}
+	}
+
+	return memberSync, nil
 
 }
 
@@ -348,31 +533,99 @@ func (gh *GithubState) SyncTeams(chart *OrgChart) (*githubSyncResult, error) {
 	gh.orgTeams = chart.Teams
 
 	gh.syncResult = &githubSyncResult{
-		make(map[string]*github.Team),
-		make(map[string]*github.Team),
+		[]*github.Team{},
+		[]*Employee{},
+		[]*Employee{},
 	}
 
-	for _, teamToCreate := range teamsNotInGithub(chart, gh) {
-		err := gh.createTeamByIDIfNotExists(teamToCreate.ID)
+	for _, teamToRemove := range githubTeamsNotInOrgchart(chart, gh) {
+		err := gh.removeTeam(teamToRemove)
 
 		if err != nil {
 			return gh.syncResult, err
 		}
 	}
 
-	// find teams that are not in github
-	// find teams that shouldn't be in github
+	for _, t := range chart.Teams {
+		if t.ParentID == "" {
+			// root team
 
-	// remove temans that shouldn't be in github
+			rootTeam, ok := gh.teams[t.Github]
 
-	// start creating teams recursively with parents
+			if !ok {
+				break
+			}
 
-	// report back
+			err := gh.removeTeam(rootTeam)
 
-	// sort out members
+			if err != nil {
+				return gh.syncResult, err
+			}
 
-	return nil, nil
+			gh.teams = map[string]*github.Team{}
 
+		}
+	}
+
+	for _, teamToCreate := range teamsNotInGithub(chart, gh) {
+		_, err := gh.createTeamByIDIfNotExists(teamToCreate.ID)
+
+		if err != nil {
+			return gh.syncResult, err
+		}
+	}
+
+	syncData, err := teamMembersSyncData(chart, gh)
+
+	if err != nil {
+		return gh.syncResult, err
+	}
+
+	for ghTeam, membership := range syncData {
+		err := gh.syncTeamMembers(ghTeam, membership.Members, membership.Maintainers)
+
+		if err != nil {
+			return gh.syncResult, err
+		}
+	}
+
+	return gh.syncResult, nil
+
+}
+
+func (gh *GithubState) syncTeamMembers(team *github.Team, memberHandles []string, maintainerHandles []string) error {
+
+	logrus.Infof("syncing members and maintainers for %s", team.GetName())
+
+	if gh.dry {
+		return nil
+	}
+
+	ctx := context.Background()
+
+	for _, user := range memberHandles {
+
+		logrus.Debugf("adding %s as member to %s", user, team.GetName())
+
+		_, _, err := gh.client.Teams.AddTeamMembership(ctx, team.GetID(), user, nil)
+
+		if err != nil {
+			return err
+		}
+
+	}
+
+	for _, user := range maintainerHandles {
+
+		logrus.Debugf("adding %s as maintainer to %s", user, team.GetName())
+
+		_, _, err := gh.client.Teams.AddTeamMembership(ctx, team.GetID(), user, &github.TeamAddTeamMembershipOptions{Role: "maintainer"})
+
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func newGitHubClient(token string) *github.Client {
@@ -400,6 +653,12 @@ func loadOrgChartData(location string) (*OrgChart, error) {
 	couchdb := couch.NewClient(URL)
 
 	err = couchdb.Get("chart", &chart)
+
+	if err != nil {
+		return nil, err
+	}
+
+	err = chart.organise()
 
 	if err != nil {
 		return nil, err
