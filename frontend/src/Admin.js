@@ -367,8 +367,8 @@ class AddPersonDialog extends React.Component {
             github: "",
             number: "",
             stream: STREAM.ENGINEERING,
-            ...nextProps.person,
             reportsTo: null,
+            ...nextProps.person,
         })
     }
 
