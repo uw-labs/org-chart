@@ -429,7 +429,21 @@ export function _moveNodesToChildren(team, showMembers, showVacancies, notRecurs
 
 const findLeadUpFromFor = (team, teams, employee) => {
 
-    let searchKey = employee.stream === STREAM.PRODUCT ? 'productLead' : 'techLead'
+    let searchKey
+
+    switch (employee.stream) {
+        case STREAM.PRODUCT:
+        case STREAM.DESIGN:
+        case STREAM.DATA:
+            searchKey = 'productLead'
+            break;
+        case STREAM.ENGINEERING:
+        case STREAM.OPERATIONS:
+            searchKey = 'techLead'
+            break;
+        default:
+            searchKey = 'techLead'
+    }
 
     let currentTeam = team
 
