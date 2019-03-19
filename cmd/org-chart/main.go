@@ -3,20 +3,21 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"os"
 	"strings"
 
+	"github.com/google/go-querystring/query"
+
 	"golang.org/x/oauth2"
 
+	"github.com/lancecarlson/couchgo"
 	"github.com/sirupsen/logrus"
+	"github.com/urfave/cli"
 
 	"github.com/google/go-github/github"
 	"github.com/pkg/errors"
-
-	"github.com/lancecarlson/couchgo"
-
-	"gopkg.in/urfave/cli.v1"
 )
 
 func main() {
@@ -46,10 +47,13 @@ func main() {
 				cli.BoolFlag{
 					Name: "dry-run",
 				},
+				cli.BoolFlag{
+					Name: "skip-members",
+				},
 			},
 			Action: func(c *cli.Context) error {
 
-				//logrus.SetLevel(logrus.DebugLevel)
+				logrus.SetLevel(logrus.DebugLevel)
 
 				orgChart, err := loadOrgChartData(c.String("data-url"))
 
@@ -59,6 +63,9 @@ func main() {
 
 				for _, t := range orgChart.Teams {
 					t.Github = fmt.Sprintf("%s%s", c.String("github-team-prefix"), strings.Replace(t.ID, "_", "-", -1))
+					if t.ParentID != "" {
+						t.ParentGithubID = fmt.Sprintf("%s%s", c.String("github-team-prefix"), strings.Replace(t.ParentID, "_", "-", -1))
+					}
 				}
 
 				gh, err := newGithubState(c.String("github-token"), c.String("github-org"), c.String("github-team-prefix"))
@@ -71,6 +78,10 @@ func main() {
 
 				if gh.dry {
 					logrus.Info("running in DRY mode")
+				}
+
+				if c.Bool("skip-members") {
+					logrus.Infof("skipping members sync")
 				}
 
 				for _, m := range githubMembersNotInOrgchart(orgChart, gh) {
@@ -89,10 +100,18 @@ func main() {
 					logrus.Infof("team %s (%s) not found in github, will be added", m.Name, m.Github)
 				}
 
-				result, err := gh.SyncTeams(orgChart)
+				result, err := gh.SyncTeams(orgChart, c.Bool("skip-members"))
 
 				if err != nil {
 					return errors.Wrap(err, "syncing teams")
+				}
+
+				for _, team := range result.createdTeams {
+					logrus.Infof("created %s in github", team.GetName())
+				}
+
+				for _, team := range result.reparentedTeams {
+					logrus.Infof("reparented %s in github", team.GetName())
 				}
 
 				for _, team := range result.removedTeams {
@@ -130,13 +149,14 @@ type Employee struct {
 }
 
 type Team struct {
-	ID            string
-	Name          string
-	ParentID      string `json:"parent"`
-	Description   string
-	Github        string
-	TeachLeadID   string `json:"techLead"`
-	ProductLeadID string `json:"productLead"`
+	ID             string
+	Name           string
+	ParentID       string `json:"parent"`
+	Description    string
+	Github         string
+	ParentGithubID string
+	TeachLeadID    string `json:"techLead"`
+	ProductLeadID  string `json:"productLead"`
 }
 
 type OrgChart struct {
@@ -321,6 +341,8 @@ func newGithubState(token, organisation, teamPrefix string) (*GithubState, error
 
 type githubSyncResult struct {
 	removedTeams             []*github.Team
+	createdTeams             []*github.Team
+	reparentedTeams          []*github.Team
 	unableToCreateMembership []*Employee
 	unableToCreateMaintainer []*Employee
 }
@@ -359,9 +381,11 @@ func (gh *GithubState) createTeamByIDIfNotExists(teamID string) (*github.Team, e
 	}
 
 	var parentID *int64
+	var parentTeam *github.Team
 
 	if teamToCreate.ParentID != "" {
-		parentTeam, err := gh.createTeamByIDIfNotExists(teamToCreate.ParentID)
+		var err error
+		parentTeam, err = gh.createTeamByIDIfNotExists(teamToCreate.ParentID)
 		if err != nil {
 			return nil, err
 		}
@@ -374,11 +398,17 @@ func (gh *GithubState) createTeamByIDIfNotExists(teamID string) (*github.Team, e
 
 	if preExistingTeam, ok := gh.teams[teamToCreate.Github]; ok {
 		if parentTeam := preExistingTeam.GetParent(); parentTeam != nil {
-			if parentTeam.GetName() != teamToCreate.ParentID {
+			if parentTeam.GetName() != teamToCreate.ParentGithubID {
+
+				//logrus.Println("team considered: ", teamToCreate.Github, "github parent", parentTeam.GetName(), "defined parent", teamToCreate.ParentGithubID)
+
+				var editedTeam *github.Team
 
 				if !gh.dry {
 
-					editedTeam, _, err := gh.client.Teams.EditTeam(ctx, preExistingTeam.GetID(), github.NewTeam{
+					var err error
+
+					editedTeam, _, err = gh.client.Teams.EditTeam(ctx, preExistingTeam.GetID(), github.NewTeam{
 						Name:         teamToCreate.Github,
 						Description:  &teamToCreate.Description,
 						ParentTeamID: parentID,
@@ -389,8 +419,13 @@ func (gh *GithubState) createTeamByIDIfNotExists(teamID string) (*github.Team, e
 						return nil, errors.Wrap(err, "editing team")
 					}
 
-					gh.teams[editedTeam.GetName()] = editedTeam
+				} else {
+					editedTeam = preExistingTeam
 				}
+
+				gh.syncResult.reparentedTeams = append(gh.syncResult.reparentedTeams, editedTeam)
+
+				gh.teams[editedTeam.GetName()] = editedTeam
 
 			}
 		}
@@ -400,10 +435,15 @@ func (gh *GithubState) createTeamByIDIfNotExists(teamID string) (*github.Team, e
 	var createdTeam *github.Team
 
 	if gh.dry {
+
+		id := rand.Int63()
+
 		createdTeam = &github.Team{
+			ID:          &id,
 			Name:        &teamToCreate.Github,
 			Description: &teamToCreate.Description,
 			Privacy:     &privacy,
+			Parent:      parentTeam,
 		}
 	} else {
 
@@ -421,6 +461,7 @@ func (gh *GithubState) createTeamByIDIfNotExists(teamID string) (*github.Team, e
 		}
 	}
 
+	gh.syncResult.createdTeams = append(gh.syncResult.createdTeams, createdTeam)
 	gh.teams[createdTeam.GetName()] = createdTeam
 
 	return createdTeam, nil
@@ -528,11 +569,13 @@ func teamMembersSyncData(chart *OrgChart, gh *GithubState) (map[*github.Team]*te
 
 }
 
-func (gh *GithubState) SyncTeams(chart *OrgChart) (*githubSyncResult, error) {
+func (gh *GithubState) SyncTeams(chart *OrgChart, skipMembers bool) (*githubSyncResult, error) {
 
 	gh.orgTeams = chart.Teams
 
 	gh.syncResult = &githubSyncResult{
+		[]*github.Team{},
+		[]*github.Team{},
 		[]*github.Team{},
 		[]*Employee{},
 		[]*Employee{},
@@ -546,28 +589,8 @@ func (gh *GithubState) SyncTeams(chart *OrgChart) (*githubSyncResult, error) {
 		}
 	}
 
-	for _, t := range chart.Teams {
-		if t.ParentID == "" {
-			// root team
-
-			rootTeam, ok := gh.teams[t.Github]
-
-			if !ok {
-				break
-			}
-
-			err := gh.removeTeam(rootTeam)
-
-			if err != nil {
-				return gh.syncResult, err
-			}
-
-			gh.teams = map[string]*github.Team{}
-
-		}
-	}
-
-	for _, teamToCreate := range teamsNotInGithub(chart, gh) {
+	for _, teamToCreate := range chart.Teams {
+		//for _, teamToCreate := range teamsNotInGithub(chart, gh) { //commented because we want to sync parents in all teams
 		_, err := gh.createTeamByIDIfNotExists(teamToCreate.ID)
 
 		if err != nil {
@@ -579,6 +602,10 @@ func (gh *GithubState) SyncTeams(chart *OrgChart) (*githubSyncResult, error) {
 
 	if err != nil {
 		return gh.syncResult, err
+	}
+
+	if skipMembers {
+		return gh.syncResult, nil
 	}
 
 	for ghTeam, membership := range syncData {
@@ -593,9 +620,61 @@ func (gh *GithubState) SyncTeams(chart *OrgChart) (*githubSyncResult, error) {
 
 }
 
-func (gh *GithubState) syncTeamMembers(team *github.Team, memberHandles []string, maintainerHandles []string) error {
+func (gh *GithubState) getTeamMembers(team *github.Team) ([]*github.User, error) {
 
-	logrus.Infof("syncing members and maintainers for %s", team.GetName())
+	ctx := context.Background()
+
+	memberOpt := &github.TeamListTeamMembersOptions{
+		ListOptions: github.ListOptions{PerPage: 500},
+	}
+
+	allMembers := []*github.User{}
+
+	for {
+
+		loc := fmt.Sprintf("teams/%v/members", team.GetID())
+
+		u, err := url.Parse(loc)
+
+		if err != nil {
+			return nil, err
+		}
+
+		q, err := query.Values(memberOpt)
+
+		if err != nil {
+			return nil, err
+		}
+
+		u.RawQuery = q.Encode()
+
+		req, err := gh.client.NewRequest("GET", u.String(), nil)
+
+		if err != nil {
+			return nil, err
+		}
+
+		var members []*github.User
+		res, err := gh.client.Do(ctx, req, &members)
+
+		if err != nil {
+			return nil, err
+		}
+
+		allMembers = append(allMembers, members...)
+
+		if res.NextPage == 0 {
+			break
+		}
+
+		memberOpt.Page = res.NextPage
+	}
+
+	return allMembers, nil
+}
+
+func (gh *GithubState) removeAllTeamMembers(team *github.Team) error {
+	logrus.Infof("removing members for %s", team.GetName())
 
 	if gh.dry {
 		return nil
@@ -603,9 +682,99 @@ func (gh *GithubState) syncTeamMembers(team *github.Team, memberHandles []string
 
 	ctx := context.Background()
 
-	for _, user := range memberHandles {
+	memberOpt := &github.TeamListTeamMembersOptions{
+		ListOptions: github.ListOptions{PerPage: 500},
+	}
 
-		logrus.Debugf("adding %s as member to %s", user, team.GetName())
+	allMembers := []*github.User{}
+
+	for {
+		members, res, err := gh.client.Teams.ListTeamMembers(ctx, team.GetID(), memberOpt)
+
+		if err != nil {
+			return err
+		}
+
+		allMembers = append(allMembers, members...)
+
+		if res.NextPage == 0 {
+			break
+		}
+
+		memberOpt.Page = res.NextPage
+	}
+
+	for _, member := range allMembers {
+		_, err := gh.client.Teams.RemoveTeamMembership(ctx, team.GetID(), member.GetLogin())
+
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (gh *GithubState) syncTeamMembers(team *github.Team, memberHandles []string, maintainerHandles []string) error {
+
+	//logrus.Infof("syncing members and maintainers for %s", team.GetName())
+
+	allMembers := append(memberHandles, maintainerHandles...)
+
+	currentMembers, err := gh.getTeamMembers(team)
+
+	if err != nil {
+		return err
+	}
+
+	membersToAdd := []string{}
+	membersToRemove := []string{}
+
+OUTER:
+	for _, ghMember := range currentMembers {
+		for _, member := range allMembers {
+			if ghMember.GetLogin() == member {
+				continue OUTER
+			}
+		}
+		membersToRemove = append(membersToRemove, ghMember.GetLogin())
+	}
+
+OUTER2:
+	for _, member := range allMembers {
+		for _, ghMember := range currentMembers {
+			if ghMember.GetLogin() == member {
+				continue OUTER2
+			}
+		}
+		membersToAdd = append(membersToAdd, member)
+	}
+
+	ctx := context.Background()
+
+	for _, user := range membersToRemove {
+
+		logrus.Debugf("removing %s from %s", user, team.GetName())
+
+		if gh.dry {
+			continue
+		}
+
+		_, err := gh.client.Teams.RemoveTeamMembership(ctx, team.GetID(), user)
+
+		if err != nil {
+			return err
+		}
+
+	}
+
+	for _, user := range membersToAdd {
+
+		logrus.Debugf("adding %s  to %s", user, team.GetName())
+
+		if gh.dry {
+			continue
+		}
 
 		_, _, err := gh.client.Teams.AddTeamMembership(ctx, team.GetID(), user, nil)
 
@@ -615,16 +784,6 @@ func (gh *GithubState) syncTeamMembers(team *github.Team, memberHandles []string
 
 	}
 
-	for _, user := range maintainerHandles {
-
-		logrus.Debugf("adding %s as maintainer to %s", user, team.GetName())
-
-		_, _, err := gh.client.Teams.AddTeamMembership(ctx, team.GetID(), user, &github.TeamAddTeamMembershipOptions{Role: "maintainer"})
-
-		if err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
