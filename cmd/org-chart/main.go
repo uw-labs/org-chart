@@ -47,6 +47,9 @@ func main() {
 				cli.BoolFlag{
 					Name: "dry-run",
 				},
+				cli.BoolFlag{
+					Name: "skip-members",
+				},
 			},
 			Action: func(c *cli.Context) error {
 
@@ -77,6 +80,10 @@ func main() {
 					logrus.Info("running in DRY mode")
 				}
 
+				if c.Bool("skip-members") {
+					logrus.Infof("skipping members sync")
+				}
+
 				for _, m := range githubMembersNotInOrgchart(orgChart, gh) {
 					logrus.Infof("github user %s not found in orgchart", m.GetLogin())
 				}
@@ -93,7 +100,7 @@ func main() {
 					logrus.Infof("team %s (%s) not found in github, will be added", m.Name, m.Github)
 				}
 
-				result, err := gh.SyncTeams(orgChart)
+				result, err := gh.SyncTeams(orgChart, c.Bool("skip-members"))
 
 				if err != nil {
 					return errors.Wrap(err, "syncing teams")
@@ -562,7 +569,7 @@ func teamMembersSyncData(chart *OrgChart, gh *GithubState) (map[*github.Team]*te
 
 }
 
-func (gh *GithubState) SyncTeams(chart *OrgChart) (*githubSyncResult, error) {
+func (gh *GithubState) SyncTeams(chart *OrgChart, skipMembers bool) (*githubSyncResult, error) {
 
 	gh.orgTeams = chart.Teams
 
@@ -595,6 +602,10 @@ func (gh *GithubState) SyncTeams(chart *OrgChart) (*githubSyncResult, error) {
 
 	if err != nil {
 		return gh.syncResult, err
+	}
+
+	if skipMembers {
+		return gh.syncResult, nil
 	}
 
 	for ghTeam, membership := range syncData {
