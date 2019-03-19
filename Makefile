@@ -5,7 +5,7 @@ dev-frontend:
 	cd frontend && npm start
 
 build-frontend:
-	cd frontend && npm build
+	cd frontend && npm run-script build
 
 DOCKER_IMAGE=quay.io/utilitywarehouse/org-chart
 
