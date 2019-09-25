@@ -67,6 +67,17 @@
       "number": "6",
       "github": "agency-bee",
       "type": "AGENCY_CONTRACTOR"
+    },
+    {
+      "id": "7",
+      "name": "Bee #7",
+      "title": "Temp Bee 2",
+      "reportsTo": null,
+      "memberOf": "hive",
+      "stream": "ENGINEERING",
+      "number": "7",
+      "github": "temp-bee-2",
+      "type": "TEMP"
     }
   ],
   "teams": [

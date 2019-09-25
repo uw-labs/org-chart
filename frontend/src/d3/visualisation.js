@@ -35,10 +35,35 @@ export default (containerId, vizFactory, name) => {
         .attr('width', 4)
         .attr('height', 4)
         .append('path')
+        .attr('shape-rendering', 'cripsEdges')
         .attr('d', 'M-1,1 l2,-2 M0,4 l4,-4 M3,5 l2,-2')
         .attr('stroke', '#000000')
         .attr('stroke-width', 1)
         .attr('opacity', 0.3)
+
+
+    defs.append('pattern')
+        .attr('id', 'pattern-stripe')
+        .attr('width', 4)
+        .attr('height', 4)
+        .attr('patternUnits', 'userSpaceOnUse')
+        .attr('patternTransform', 'rotate(45)')
+        .append('rect')
+        .attr('width' ,3)
+        .attr('height', 4)
+        .attr('transform', 'translate(0,0)')
+        .attr('fill', 'gray')
+
+
+    defs.append('mask')
+        .attr('id', 'diagonalHatchMask')
+        .append('rect')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('width', '100%')
+        .attr('height', '100%')
+        .attr('fill', 'url(#smallDot)')
+
 
     defs.append('pattern')
         .attr('id', 'smallDotColor')

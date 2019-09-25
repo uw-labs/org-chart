@@ -143,13 +143,18 @@ export default (nodes) => {
                         return 'url(#diagonalHatch)'
                     }
 
+                    if(d.data.type && d.data.type !== "EMPLOYEE") {
+                        //return 'gray'
+                    }
+
                     return color(label((d.children ? d : d.parent).data, true));
                 })
                 .attr("stroke", "black")
                 .attr("stoke-width", 0.2)
-                .style("opacity", function(d) {
+                .attr("fill-opacity", function(d) {
+
                     if (d.data.startDate) {
-                        return 0.20
+                        return 0.80
                     }
                     return 1
                 })
@@ -158,16 +163,7 @@ export default (nodes) => {
                     return null
                 })
                 .on("dblclick", click)
-
-                .append('pattern')
-                .attr('id', 'smallDot')
-                .attr('patternUnits', 'userSpaceOnUse')
-                .attr('width', 4)
-                .attr('height', 4)
-                .append('image')
-                .attr('href', "data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc1JyBoZWlnaHQ9JzUnPgo8cmVjdCB3aWR0aD0nNScgaGVpZ2h0PSc1JyBmaWxsPScjZmZmJy8+CjxyZWN0IHdpZHRoPScxJyBoZWlnaHQ9JzEnIGZpbGw9JyNjY2MnLz4KPC9zdmc+")
-                .attr('x', 0)
-                .attr('y', 0)
+            
 
 
             const text = path.append("text")
