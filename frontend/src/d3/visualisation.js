@@ -41,6 +41,16 @@ export default (containerId, vizFactory, name) => {
         .attr('opacity', 0.3)
 
     defs.append('pattern')
+        .attr('id', 'smallDotColor')
+        .attr('patternUnits', 'userSpaceOnUse')
+        .attr('width', 4)
+        .attr('height', 4)
+        .append('image')
+        .attr('href', "data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc1JyBoZWlnaHQ9JzUnPgo8cmVjdCB3aWR0aD0nNScgaGVpZ2h0PSc1JyBmaWxsPScjZmZmJy8+CjxyZWN0IHdpZHRoPScxJyBoZWlnaHQ9JzEnIGZpbGw9JyNjY2MnLz4KPC9zdmc+")
+        .attr('x', 0)
+        .attr('y', 0)
+
+    defs.append('pattern')
         .attr('id', 'smallDot')
         .attr('patternUnits', 'userSpaceOnUse')
         .attr('width', 4)

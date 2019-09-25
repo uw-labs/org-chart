@@ -38,6 +38,27 @@ export default (nodes) => {
             if (d.type === 'team') {
                 return `${d.name} ${d.group_actual}/${d.group}`
             }
+
+            if (d.type === "TEMP") {
+                return "[TMP] "+d.name
+            }
+
+            if (d.type === "CONTRACTOR") {
+                return "[CON] "+d.name
+            }
+
+            if (d.type === "AGENCY_CONTRACTOR") {
+                return "[AGN] "+d.name
+            }
+
+            if (d.kind === 'vacancy') {
+                return "[HC] "+d.name
+            }
+
+            if (d.kind === 'backfill') {
+                return "[BF] "+d.name
+            }
+
             if (d.name) {
                 return d.name
             }
@@ -109,26 +130,49 @@ export default (nodes) => {
                     })
                 )
 
+
+
             path.append("path")
                 .attr("d", arc)
                 .style("fill", function (d) {
-                    if (d.data.kind === 'vacancy' && d.data.name === "ENGINEERING" ) {
+
+                    if ((d.data.kind === 'vacancy' || d.data.kind === 'backfill') && d.data.name.endsWith("ENGINEERING") ) {
                         return 'url(#smallDot)'
                     }
-                    if (d.data.kind === 'vacancy') {
+                    if (d.data.kind === 'vacancy' || d.data.kind === 'backfill') {
                         return 'url(#diagonalHatch)'
                     }
+
                     return color(label((d.children ? d : d.parent).data, true));
                 })
                 .attr("stroke", "black")
                 .attr("stoke-width", 0.2)
+                .style("opacity", function(d) {
+                    if (d.data.startDate) {
+                        return 0.20
+                    }
+                    return 1
+                })
                 .style("mask", (d) => {
+                    // can this be used for different employee styles?
                     return null
                 })
                 .on("dblclick", click)
 
+                .append('pattern')
+                .attr('id', 'smallDot')
+                .attr('patternUnits', 'userSpaceOnUse')
+                .attr('width', 4)
+                .attr('height', 4)
+                .append('image')
+                .attr('href', "data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc1JyBoZWlnaHQ9JzUnPgo8cmVjdCB3aWR0aD0nNScgaGVpZ2h0PSc1JyBmaWxsPScjZmZmJy8+CjxyZWN0IHdpZHRoPScxJyBoZWlnaHQ9JzEnIGZpbGw9JyNjY2MnLz4KPC9zdmc+")
+                .attr('x', 0)
+                .attr('y', 0)
+
+
             const text = path.append("text")
                 .text(function (d) {
+
                     return label(d.data, 1)
                 })
                 .attr("x", function (d) {

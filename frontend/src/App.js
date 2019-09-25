@@ -17,11 +17,13 @@ import Reporting from './Reporting'
 export default class App extends React.Component {
     constructor(props) {
         super(props)
-
         this.state = {
             admin: fromJS({
                 section: 'teams',
-                data: props.data.toLiteral()
+                data: {
+                    teamsById: props.data.teamsById(),
+                    ...props.data.toLiteral()
+                },
             })
         }
     }
@@ -139,13 +141,13 @@ export default class App extends React.Component {
         this.bang()
     }
 
-    addEmployee = (name, title, stream, reportsTo, employee, github) => {
-        this.props.data.addEmployee(name, title, stream, reportsTo, employee, github)
+    addEmployee = (name, title, stream, reportsTo, employee, github, startDate, type) => {
+        this.props.data.addEmployee(name, title, stream, reportsTo, employee, github, startDate, type)
         this.bang()
     }
 
-    editEmployee = (id, name, title, stream, reportsTo, employee, github) => {
-        this.props.data.editEmployee(id, name, title, stream, reportsTo, employee, github)
+    editEmployee = (id, name, title, stream, reportsTo, employee, github, startDate, type) => {
+        this.props.data.editEmployee(id, name, title, stream, reportsTo, employee, github, startDate, type)
         this.bang()
     }
 

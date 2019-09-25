@@ -1,7 +1,10 @@
 import React from 'react'
 import {Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis} from 'recharts'
 
+import {List, ListItem} from 'material-ui/List'
+
 import {STREAM, flattenTeamHierarchyExcluding} from './state'
+import TextField from "material-ui/TextField";
 
 export default class Stats extends React.Component {
     render() {
@@ -12,10 +15,16 @@ export default class Stats extends React.Component {
 
         const team = this.props.data.get("teams").toJS();
 
+        const employees = this.props.data.get("employees").toJS();
+
+        const teamsById = this.props.data.get("teamsById").toJS();
+
         const teamsFlat = [team].reduce(flattenTeamHierarchyExcluding(), [])
 
         return (
             <div>
+                <div><h3>New Starters</h3><StartDateList employees={employees} teams={teamsById}/></div>
+                <div><h3>Contractors</h3><NonEmployees employees={employees} teams={teamsById}/></div>
                 <div><h3>Totals</h3><TwoLevelPieChart teams={teamsFlat}/></div>
                 <div><h3>Engineering</h3><StackedBarChart teams={teamsFlat} engineering title={"Engineering"}/></div>
                 <div><h3>Product</h3><StackedBarChart teams={teamsFlat} product/></div>
@@ -91,12 +100,13 @@ const StackedBarChart = ({teams, engineering, operations, portfolio, product, da
     const datas = teams.map(t => {
         const members = t.members.filter(memberFilter).length
         const vacancies = countVacancies(t.vacancies, {engineering, operations, portfolio, product, data, design})
+        const backfills = countVacancies(t.backfills, {engineering, operations, portfolio, product, data, design})
 
         if (t.name === "Technology Department" || (!vacancies && !members)) {
             return null
         }
 
-        return {name: t.name, members, vacancies}
+        return {name: t.name, members, vacancies, backfills}
 
     }).filter(f => !!f)
 
@@ -108,8 +118,9 @@ const StackedBarChart = ({teams, engineering, operations, portfolio, product, da
                 <CartesianGrid/>
                 <Tooltip/>
                 <Legend/>
-                <Bar dataKey="members" stackId="a" fill="#00B4CE"/>
-                <Bar dataKey="vacancies" stackId="a" fill="#00ccc8"/>
+                <Bar dataKey="members" stackId="a" fill="#00ccc8"/>
+                <Bar dataKey="vacancies" stackId="a" fill="#f5aa3c"/>
+                <Bar dataKey="backfills" stackId="a" fill="#ea73ea"/>
             </BarChart>
         </ResponsiveContainer>
     )
@@ -120,7 +131,7 @@ const TwoLevelPieChart = ({teams}) => {
     const streams = {}
 
     Object.keys(STREAM).forEach(st => {
-        streams[st] = {employees: 0, vacancies: 0}
+        streams[st] = {employees: 0, vacancies: 0, backfills: 0}
     })
 
     let max = 0
@@ -130,11 +141,13 @@ const TwoLevelPieChart = ({teams}) => {
             streams[m.stream].employees += 1
             max = max < streams[m.stream].employees ? streams[m.stream].employees : max
         })
-    })
 
-    teams.forEach(t => {
         Object.keys(t.vacancies).forEach(st => {
             streams[st].vacancies += t.vacancies[st]
+        })
+
+        Object.keys(t.backfills).forEach(st => {
+            streams[st].backfills += t.backfills[st]
         })
     })
 
@@ -152,11 +165,32 @@ const TwoLevelPieChart = ({teams}) => {
                 <CartesianGrid/>
                 <Tooltip/>
                 <Legend/>
-                <Bar dataKey="employees" stackId="a" fill="#00B4CE"/>
-                <Bar dataKey="vacancies" stackId="a" fill="#00ccc8"/>
+                <Bar dataKey="employees" stackId="a" fill="#00ccc8"/>
+                <Bar dataKey="vacancies" stackId="a" fill="#f5aa3c"/>
+                <Bar dataKey="backfills" stackId="a" fill="#ea73ea"/>
             </BarChart>
         </ResponsiveContainer>
 
+    )
+}
+
+const StartDateList = ({employees, teams}) => {
+    return (
+        <List>
+            {employees.filter(e => e.startDate).map(e => (
+                <ListItem key={e.id} primaryText={`${e.name} - ${e.memberOf ? teams[e.memberOf].name : 'Unassigned'}`} secondaryText={e.startDate} />
+            ))}
+        </List>
+    )
+}
+
+const NonEmployees = ({employees, teams}) => {
+    return (
+        <List>
+            {employees.filter(e => e.type !== "EMPLOYEE").map(e => (
+                <ListItem key={e.id} primaryText={`${e.name} - ${e.memberOf ? teams[e.memberOf].name : 'Unassigned'}`} secondaryText={e.type} />
+            ))}
+        </List>
     )
 }
 

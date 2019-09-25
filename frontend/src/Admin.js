@@ -14,7 +14,7 @@ import Dialog from 'material-ui/Dialog';
 import IconButton from 'material-ui/IconButton';
 import EditIcon from 'material-ui/svg-icons/editor/mode-edit';
 
-import {flattenTeamHierarchyExcluding, KIND, STREAM} from './state'
+import {flattenTeamHierarchyExcluding, KIND, STREAM, TYPE} from './state'
 
 
 function debounce(func, wait, immediate) {
@@ -326,6 +326,23 @@ class EmployeeList extends React.Component {
                         if (team) {
                             sub = `${sub} - ${team.name}`
                         }
+
+                        if (e.type === "TEMP") {
+                            sub = `[TMP] ${sub}`
+                        }
+
+                        if (e.type === "CONTRACTOR") {
+                            sub = `[CON] ${sub}`
+                        }
+
+                        if (e.type === "AGENCY_CONTRACTOR") {
+                            sub = `[AGN] ${sub}`
+                        }
+
+                        if (e.startDate) {
+                            sub = `${e.startDate} - ${sub}`
+                        }
+
                         return (<ListItem primaryText={e.name + ` #${e.number}`} key={e.id} onClick={() => exclude && addToTeam(e.id)}
                                           secondaryText={sub}
                                           rightIconButton={<IconButton tooltip="edit" onClick={() => {
@@ -351,7 +368,9 @@ class AddPersonDialog extends React.Component {
         stream: STREAM.ENGINEERING,
         reportsTo: null,
         github: "",
-        number: ""
+        number: "",
+        type: TYPE.EMPLOYEE,
+        startDate: "",
     }
 
     componentWillReceiveProps(nextProps) {
@@ -368,6 +387,8 @@ class AddPersonDialog extends React.Component {
             number: "",
             stream: STREAM.ENGINEERING,
             reportsTo: null,
+            type: TYPE.EMPLOYEE,
+            startDate: "",
             ...nextProps.person,
         })
     }
@@ -378,16 +399,16 @@ class AddPersonDialog extends React.Component {
     };
 
     submit = () => {
-        const {id, name, title, stream, reportsTo, number, github} = this.state
+        const {id, name, title, stream, reportsTo, number, github, type, startDate} = this.state
 
-        if (!name || !title || !stream) {
+        if (!name || !title || !stream || !type) {
             return
         }
 
         if (id) {
-            this.props.editEmployee(id, name, title, stream, reportsTo, number, github);
+            this.props.editEmployee(id, name, title, stream, reportsTo, number, github, startDate, type);
         } else {
-            this.props.addEmployee(name, title, stream, reportsTo, number, github);
+            this.props.addEmployee(name, title, stream, reportsTo, number, github, startDate, type);
         }
 
         this.handleClose()
@@ -442,6 +463,10 @@ class AddPersonDialog extends React.Component {
                     this.setState({title: val})
                 }} value={this.state.title}/><br/>
 
+                <TextField floatingLabelText={"Start Date"} onChange={(_, val) => {
+                    this.setState({startDate: val})
+                }} value={this.state.startDate}/><br/>
+
                 <TextField floatingLabelText={"GitHub"} onChange={(_, val) => {
                     this.setState({github: val})
                 }} value={this.state.github}/><br/>
@@ -450,34 +475,41 @@ class AddPersonDialog extends React.Component {
                     this.setState({number: val})
                 }} value={this.state.number}/><br/>
 
-                <RadioButtonGroup name="stream" onChange={(_, val) => {
-                    this.setState({stream: val})
-                }} labelPosition={"right"} valueSelected={this.state.stream}>
-                    <RadioButton
-                        value={STREAM.ENGINEERING}
-                        label={STREAM.ENGINEERING}
-                    />
-                    <RadioButton
-                        value={STREAM.PRODUCT}
-                        label={STREAM.PRODUCT}
-                    />
-                    <RadioButton
-                        value={STREAM.DATA}
-                        label={STREAM.DATA}
-                    />
-                    <RadioButton
-                        value={STREAM.DESIGN}
-                        label={STREAM.DESIGN}
-                    />
-                    <RadioButton
-                        value={STREAM.OPERATIONS}
-                        label={STREAM.OPERATIONS}
-                    />
-                    <RadioButton
-                        value={STREAM.PORTFOLIO}
-                        label={STREAM.PORTFOLIO}
-                    />
-                </RadioButtonGroup>
+                <SelectField
+                    onChange={(_, __, val) => {
+                        this.setState({stream: val})
+                    }}
+                    fullWidth={true}
+                    value={this.state.stream}
+                    floatingLabelText={"Stream"}
+
+                >
+
+                    <MenuItem key={STREAM.ENGINEERING} value={STREAM.ENGINEERING} primaryText={STREAM.ENGINEERING}/>
+                    <MenuItem key={STREAM.PRODUCT} value={STREAM.PRODUCT} primaryText={STREAM.PRODUCT}/>
+                    <MenuItem key={STREAM.DATA} value={STREAM.DATA} primaryText={STREAM.DATA}/>
+                    <MenuItem key={STREAM.DESIGN} value={STREAM.DESIGN} primaryText={STREAM.DESIGN}/>
+                    <MenuItem key={STREAM.OPERATIONS} value={STREAM.OPERATIONS} primaryText={STREAM.OPERATIONS}/>
+                    <MenuItem key={STREAM.PORTFOLIO} value={STREAM.PORTFOLIO} primaryText={STREAM.PORTFOLIO}/>
+
+                </SelectField>
+
+
+                <SelectField
+                    onChange={(_, __, val) => {
+                        this.setState({type: val})
+                    }}
+                    fullWidth={true}
+                    value={this.state.type}
+                    floatingLabelText={"Type"}
+                >
+
+                    <MenuItem key={TYPE.EMPLOYEE} value={TYPE.EMPLOYEE} primaryText={TYPE.EMPLOYEE}/>
+                    <MenuItem key={TYPE.CONTRACTOR} value={TYPE.CONTRACTOR} primaryText={TYPE.CONTRACTOR}/>
+                    <MenuItem key={TYPE.AGENCY_CONTRACTOR} value={TYPE.AGENCY_CONTRACTOR} primaryText={TYPE.AGENCY_CONTRACTOR}/>
+                    <MenuItem key={TYPE.TEMP} value={TYPE.TEMP} primaryText={TYPE.TEMP}/>
+
+                </SelectField>
 
                 <SelectField
                     onChange={(_, __, val) => {
