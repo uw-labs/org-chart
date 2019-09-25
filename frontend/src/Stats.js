@@ -4,7 +4,7 @@ import {Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxi
 import {List, ListItem} from 'material-ui/List'
 
 import {STREAM, flattenTeamHierarchyExcluding} from './state'
-import TextField from "material-ui/TextField";
+
 
 export default class Stats extends React.Component {
     render() {

@@ -76,11 +76,11 @@
       "kind": "DEPARTMENT",
       "parent": null,
       "vacancies": {
-        "ENGINEERING": 1,
-        "PRODUCT": 1
+        "ENGINEERING": 4,
+        "PRODUCT": 2
       },
       "backfills": {
-        "ENGINEERING": 1,
+        "ENGINEERING": 3,
         "PRODUCT": 1
       },
       "techLead": "3",

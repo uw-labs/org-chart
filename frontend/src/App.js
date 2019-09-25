@@ -52,7 +52,9 @@ export default class App extends React.Component {
     }
 
     bang = () => {
-        const state = this.state.admin.set('data', fromJS(this.props.data.toLiteral()))
+        const state = this.state.admin.set('data', fromJS({
+            teamsById: this.props.data.teamsById(),
+            ...this.props.data.toLiteral()}))
         this.setState({admin: state})
     }
 
@@ -83,6 +85,11 @@ export default class App extends React.Component {
 
     changeHeadcount = (team, stream, headcount) => {
         this.props.data.changeHeadcount(team, stream, headcount)
+        this.bang()
+    }
+
+    changeBackfills = (team, stream, headcount) => {
+        this.props.data.changeBackfills(team, stream, headcount)
         this.bang()
     }
 
@@ -187,6 +194,7 @@ export default class App extends React.Component {
                                       addToTeam: this.addToTeam,
                                       removeFromTeam: this.removeFromTeam,
                                       changeHeadcount: this.changeHeadcount,
+                                      changeBackfills: this.changeBackfills,
                                       addNewTeam: this.addNewTeam,
                                       changeTeamName: this.changeTeamName,
                                       changeTeamDescription: this.changeTeamDescription,

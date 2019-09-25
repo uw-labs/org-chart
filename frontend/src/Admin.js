@@ -2,6 +2,7 @@ import React from 'react'
 
 import {Box, Flex} from 'reflexbox'
 import {List, ListItem} from 'material-ui/List'
+import {CardHeader} from 'material-ui/Card'
 import Subheader from 'material-ui/Subheader';
 import SelectField from 'material-ui/SelectField';
 import MenuItem from 'material-ui/MenuItem';
@@ -141,7 +142,7 @@ class TeamDetails extends React.Component {
     }
 
     render() {
-        let {root, team, reparentTeam, removeFromTeam, changeHeadcount, removeTeam, employees, setProductLead, setTechLead} = this.props
+        let {root, team, reparentTeam, removeFromTeam, changeHeadcount, changeBackfills, removeTeam, employees, setProductLead, setTechLead} = this.props
 
         if (!team) {
             return null
@@ -180,12 +181,27 @@ class TeamDetails extends React.Component {
                         <MenuItem key={t.id} value={t.id} primaryText={t.name}/>
                     ))}
                 </SelectField>
+
+                <CardHeader title={"Vacancies"}/>
+
                 <Flex p={0}>
-                    {[...new Set(Object.keys(team.vacancies).concat(upstreamEmlpoyeesStreams))].map(s => (
+                    {[...new Set(Object.keys(team.vacancies).concat(upstreamEmlpoyeesStreams))].sort().map(s => (
                         <Box pb={0} w={1 / 4} style={{alignSelf: "flex-start"}} key={`vacancies_${s}`}>
                             <TextField onChange={(_, val) => changeHeadcount(team.id, s, val)}
                                        floatingLabelText={s.toLowerCase()}
                                        value={team.vacancies[s] !== undefined ? team.vacancies[s] : ""}/>
+                        </Box>
+                    ))}
+                </Flex>
+
+                <CardHeader title={"Backfills"}/>
+
+                <Flex p={0}>
+                    {[...new Set(Object.keys(team.vacancies).concat(upstreamEmlpoyeesStreams))].sort().map(s => (
+                        <Box pb={0} w={1 / 4} style={{alignSelf: "flex-start"}} key={`backfills_${s}`}>
+                            <TextField onChange={(_, val) => changeBackfills(team.id, s, val)}
+                                       floatingLabelText={s.toLowerCase()}
+                                       value={team.backfills[s] !== undefined ? team.backfills[s] : ""}/>
                         </Box>
                     ))}
                 </Flex>

@@ -248,6 +248,14 @@ class Organisation {
         this.teams.find(t => t.id === team).vacancies[stream] = headcount
     }
 
+    changeBackfills(team, stream, headcount) {
+        headcount = parseInt(headcount, 10)
+        if (isNaN(headcount)) {
+            headcount = undefined
+        }
+        this.teams.find(t => t.id === team).backfills[stream] = headcount
+    }
+
     addNewTeam(name, kind, parent, description) {
         this.teams.push(new Team(makeTeamId(name, kind), name, kind, parent, undefined, undefined, undefined, description))
     }
@@ -425,7 +433,7 @@ function makeEmployeeId(name) {
 
 const data = new Organisation([],[])
 
-if (process.env.NODE_ENV == "development") {
+if (process.env.NODE_ENV === "development") {
     const d = require("./fixtures/example.json")
     data.parseData(d)
 }
