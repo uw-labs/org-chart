@@ -37,8 +37,8 @@ class Employee {
         this.stream = stream
         this.number = number
         this.github = github
-        this.startDate = startDate
-        this.type = type
+        this.startDate = startDate || ""
+        this.type = type || TYPE.EMPLOYEE
     }
 }
 
@@ -235,9 +235,11 @@ class Organisation {
     }
 
     parseData(data) {
-        this.rootEmployee = data.rootEmployee;
         this.employees = data.employees.map(e => Object.assign(new Employee(), e))
         this.teams = data.teams.map(e => Object.assign(new Team(), e))
+
+        this.rootEmployee = data.rootEmployee || "damon_petta";
+
     }
 
     changeHeadcount(team, stream, headcount) {

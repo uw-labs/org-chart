@@ -407,6 +407,7 @@ class AddPersonDialog extends React.Component {
             startDate: "",
             ...nextProps.person,
         })
+
     }
 
     handleClose = () => {

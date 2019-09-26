@@ -154,7 +154,7 @@ export default (nodes) => {
                 .attr("fill-opacity", function(d) {
 
                     if (d.data.startDate) {
-                        return 0.80
+                        return 0.60
                     }
                     return 1
                 })
@@ -163,7 +163,7 @@ export default (nodes) => {
                     return null
                 })
                 .on("dblclick", click)
-            
+
 
 
             const text = path.append("text")
