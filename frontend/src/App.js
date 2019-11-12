@@ -17,11 +17,13 @@ import Reporting from './Reporting'
 export default class App extends React.Component {
     constructor(props) {
         super(props)
-
         this.state = {
             admin: fromJS({
                 section: 'teams',
-                data: props.data.toLiteral()
+                data: {
+                    teamsById: props.data.teamsById(),
+                    ...props.data.toLiteral()
+                },
             })
         }
     }
@@ -50,7 +52,9 @@ export default class App extends React.Component {
     }
 
     bang = () => {
-        const state = this.state.admin.set('data', fromJS(this.props.data.toLiteral()))
+        const state = this.state.admin.set('data', fromJS({
+            teamsById: this.props.data.teamsById(),
+            ...this.props.data.toLiteral()}))
         this.setState({admin: state})
     }
 
@@ -81,6 +85,11 @@ export default class App extends React.Component {
 
     changeHeadcount = (team, stream, headcount) => {
         this.props.data.changeHeadcount(team, stream, headcount)
+        this.bang()
+    }
+
+    changeBackfills = (team, stream, headcount) => {
+        this.props.data.changeBackfills(team, stream, headcount)
         this.bang()
     }
 
@@ -139,13 +148,13 @@ export default class App extends React.Component {
         this.bang()
     }
 
-    addEmployee = (name, title, stream, reportsTo, employee, github) => {
-        this.props.data.addEmployee(name, title, stream, reportsTo, employee, github)
+    addEmployee = (name, title, stream, reportsTo, employee, github, startDate, type) => {
+        this.props.data.addEmployee(name, title, stream, reportsTo, employee, github, startDate, type)
         this.bang()
     }
 
-    editEmployee = (id, name, title, stream, reportsTo, employee, github) => {
-        this.props.data.editEmployee(id, name, title, stream, reportsTo, employee, github)
+    editEmployee = (id, name, title, stream, reportsTo, employee, github, startDate, type) => {
+        this.props.data.editEmployee(id, name, title, stream, reportsTo, employee, github, startDate, type)
         this.bang()
     }
 
@@ -185,6 +194,7 @@ export default class App extends React.Component {
                                       addToTeam: this.addToTeam,
                                       removeFromTeam: this.removeFromTeam,
                                       changeHeadcount: this.changeHeadcount,
+                                      changeBackfills: this.changeBackfills,
                                       addNewTeam: this.addNewTeam,
                                       changeTeamName: this.changeTeamName,
                                       changeTeamDescription: this.changeTeamDescription,

@@ -20,8 +20,15 @@ export const KIND = {
     UNIT: 'UNIT'
 }
 
+export const TYPE = {
+    EMPLOYEE: 'EMPLOYEE',
+    TEMP: 'TEMP',
+    CONTRACTOR: 'CONTRACTOR',
+    AGENCY_CONTRACTOR: 'AGENCY_CONTRACTOR',
+}
+
 class Employee {
-    constructor(id, name, title, reportsTo, memberOf, stream, number, github) {
+    constructor(id, name, title, reportsTo, memberOf, stream, number, github, startDate, type) {
         this.id = id
         this.name = name
         this.title = title
@@ -30,16 +37,19 @@ class Employee {
         this.stream = stream
         this.number = number
         this.github = github
+        this.startDate = startDate || ""
+        this.type = type || TYPE.EMPLOYEE
     }
 }
 
 class Team {
-    constructor(id, name, kind, parent, vacancies, techLead, productLead, description) {
+    constructor(id, name, kind, parent, vacancies, techLead, productLead, description, backfills) {
         this.id = id
         this.name = name
         this.kind = kind
         this.parent = parent
         this.vacancies = vacancies || {}
+        this.backfills = backfills || {}
         this.techLead = techLead
         this.productLead = productLead
         this.description = description
@@ -59,13 +69,24 @@ class Organisation {
                 return (a.name > b.name) ? 1 : -1
             }),
             teams: this.teamHierarchy(),
-            reporting: this.reportingHierarchy()
+            reporting: this.reportingHierarchy(),
+            rootEmployee: this.rootEmployee,
         }
+    }
+
+    teamsById() {
+        const byId = {}
+
+        this.teams.forEach(t => {
+            byId[t.id] = t;
+        })
+
+        return byId
     }
 
     reportingHierarchy() {
 
-        const root = 'damon_petta'
+        const root = this.rootEmployee;
 
         const teamsById = {}
 
@@ -195,7 +216,8 @@ class Organisation {
             teams: this.teams.sort((a, b) => {
                 if (a.name === b.name) return 0
                 return (a.name > b.name) ? 1 : -1
-            })
+            }),
+            rootEmployee: this.rootEmployee,
         }, null, 2)
     }
 
@@ -215,6 +237,9 @@ class Organisation {
     parseData(data) {
         this.employees = data.employees.map(e => Object.assign(new Employee(), e))
         this.teams = data.teams.map(e => Object.assign(new Team(), e))
+
+        this.rootEmployee = data.rootEmployee || "damon_petta";
+
     }
 
     changeHeadcount(team, stream, headcount) {
@@ -223,6 +248,14 @@ class Organisation {
             headcount = undefined
         }
         this.teams.find(t => t.id === team).vacancies[stream] = headcount
+    }
+
+    changeBackfills(team, stream, headcount) {
+        headcount = parseInt(headcount, 10)
+        if (isNaN(headcount)) {
+            headcount = undefined
+        }
+        this.teams.find(t => t.id === team).backfills[stream] = headcount
     }
 
     addNewTeam(name, kind, parent, description) {
@@ -348,11 +381,11 @@ class Organisation {
         this.teams = this.teams.filter(t => t.id !== team)
     }
 
-    addEmployee(name, title, stream, reportsTo, employee, github) {
-        this.employees.push(new Employee(makeEmployeeId(name), name, title, reportsTo, undefined, stream, employee, github))
+    addEmployee(name, title, stream, reportsTo, employee, github, startDate, type) {
+        this.employees.push(new Employee(makeEmployeeId(name), name, title, reportsTo, undefined, stream, employee, github, startDate === "" ? null : startDate, type))
     }
 
-    editEmployee(id, name, title, stream, reportsTo, employeeNumber, github) {
+    editEmployee(id, name, title, stream, reportsTo, employeeNumber, github, startDate, type) {
         const employee = this.employees.find(e => e.id === id)
 
         employee.name = name
@@ -361,6 +394,8 @@ class Organisation {
         employee.reportsTo = reportsTo
         employee.number = employeeNumber
         employee.github = github
+        employee.startDate = startDate === "" ? null : startDate
+        employee.type = type
 
     }
 
@@ -400,6 +435,11 @@ function makeEmployeeId(name) {
 
 const data = new Organisation([],[])
 
+if (process.env.NODE_ENV === "development") {
+    const d = require("./fixtures/example.json")
+    data.parseData(d)
+}
+
 export default data
 
 export function _moveNodesToChildren(team, showMembers, showVacancies, notRecursive) {
@@ -419,6 +459,15 @@ export function _moveNodesToChildren(team, showMembers, showVacancies, notRecurs
                     name: `${stream}`,
                     kind: 'vacancy',
                     id: `vacancy_${team.id}_${stream}_${n}`
+                })
+            }
+        }
+        for (let stream in team.backfills) {
+            for (let n = 1; n <=team.backfills[stream]; n++) {
+                team.children.push({
+                    name: `${stream}`,
+                    kind: 'backfill',
+                    id: `backfill_${team.id}_${stream}_${n}`
                 })
             }
         }

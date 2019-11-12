@@ -1,0 +1,102 @@
+{
+  "rootEmployee": "2",
+  "employees": [
+    {
+      "id": "1",
+      "name": "Bee #1",
+      "title": "Worker Bee",
+      "reportsTo": "2",
+      "memberOf": "hive",
+      "stream": "ENGINEERING",
+      "number": "1",
+      "github": "worker-bee",
+      "type": "EMPLOYEE",
+      "startDate": "20th Oct 2020"
+    },
+    {
+      "id": "2",
+      "name": "Bee #2",
+      "title": "Queen Bee",
+      "reportsTo": null,
+      "memberOf": "hive",
+      "stream": "PRODUCT",
+      "number": "2",
+      "github": "queen-bee",
+      "type": "EMPLOYEE"
+    },
+    {
+      "id": "3",
+      "name": "Bee #3",
+      "title": "Mighty Bee",
+      "reportsTo": null,
+      "memberOf": "hive",
+      "stream": "ENGINEERING",
+      "number": "3",
+      "github": "mighty-bee",
+      "type": "EMPLOYEE"
+    },
+    {
+      "id": "4",
+      "name": "Bee #4",
+      "title": "Temp Bee",
+      "reportsTo": null,
+      "memberOf": "hive",
+      "stream": "ENGINEERING",
+      "number": "4",
+      "github": "tempt-bee",
+      "type": "TEMP"
+    },
+    {
+      "id": "5",
+      "name": "Bee #5",
+      "title": "Contract Bee",
+      "reportsTo": null,
+      "memberOf": "hive",
+      "stream": "ENGINEERING",
+      "number": "5",
+      "github": "contract-bee",
+      "type": "CONTRACTOR"
+    },
+    {
+      "id": "6",
+      "name": "Bee #6",
+      "title": "Agency Bee",
+      "reportsTo": null,
+      "memberOf": "hive",
+      "stream": "ENGINEERING",
+      "number": "6",
+      "github": "agency-bee",
+      "type": "AGENCY_CONTRACTOR"
+    },
+    {
+      "id": "7",
+      "name": "Bee #7",
+      "title": "Temp Bee 2",
+      "reportsTo": null,
+      "memberOf": "hive",
+      "stream": "ENGINEERING",
+      "number": "7",
+      "github": "temp-bee-2",
+      "type": "TEMP"
+    }
+  ],
+  "teams": [
+    {
+      "id": "hive",
+      "name": "Hive",
+      "kind": "DEPARTMENT",
+      "parent": null,
+      "vacancies": {
+        "ENGINEERING": 4,
+        "PRODUCT": 2
+      },
+      "backfills": {
+        "ENGINEERING": 3,
+        "PRODUCT": 1
+      },
+      "techLead": "3",
+      "productLead": "2",
+      "description": "Honey's alright, right?"
+    }
+  ]
+}

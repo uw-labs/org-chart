@@ -38,6 +38,27 @@ export default (nodes) => {
             if (d.type === 'team') {
                 return `${d.name} ${d.group_actual}/${d.group}`
             }
+
+            if (d.type === "TEMP") {
+                return "[TMP] "+d.name
+            }
+
+            if (d.type === "CONTRACTOR") {
+                return "[CON] "+d.name
+            }
+
+            if (d.type === "AGENCY_CONTRACTOR") {
+                return "[AGN] "+d.name
+            }
+
+            if (d.kind === 'vacancy') {
+                return "[HC] "+d.name
+            }
+
+            if (d.kind === 'backfill') {
+                return "[BF] "+d.name
+            }
+
             if (d.name) {
                 return d.name
             }
@@ -109,26 +130,45 @@ export default (nodes) => {
                     })
                 )
 
+
+
             path.append("path")
                 .attr("d", arc)
                 .style("fill", function (d) {
-                    if (d.data.kind === 'vacancy' && d.data.name === "ENGINEERING" ) {
+
+                    if ((d.data.kind === 'vacancy' || d.data.kind === 'backfill') && d.data.name.endsWith("ENGINEERING") ) {
                         return 'url(#smallDot)'
                     }
-                    if (d.data.kind === 'vacancy') {
+                    if (d.data.kind === 'vacancy' || d.data.kind === 'backfill') {
                         return 'url(#diagonalHatch)'
                     }
+
+                    if(d.data.type && d.data.type !== "EMPLOYEE") {
+                        //return 'gray'
+                    }
+
                     return color(label((d.children ? d : d.parent).data, true));
                 })
                 .attr("stroke", "black")
                 .attr("stoke-width", 0.2)
+                .attr("fill-opacity", function(d) {
+
+                    if (d.data.startDate) {
+                        return 0.60
+                    }
+                    return 1
+                })
                 .style("mask", (d) => {
+                    // can this be used for different employee styles?
                     return null
                 })
                 .on("dblclick", click)
 
+
+
             const text = path.append("text")
                 .text(function (d) {
+
                     return label(d.data, 1)
                 })
                 .attr("x", function (d) {
