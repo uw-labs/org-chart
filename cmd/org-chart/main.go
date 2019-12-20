@@ -400,7 +400,7 @@ func (gh *GithubState) createTeamByIDIfNotExists(teamID string) (*github.Team, e
 		if parentTeam := preExistingTeam.GetParent(); parentTeam != nil {
 			if parentTeam.GetName() != teamToCreate.ParentGithubID {
 
-				//logrus.Println("team considered: ", teamToCreate.Github, "github parent", parentTeam.GetName(), "defined parent", teamToCreate.ParentGithubID)
+				// SOMTHING HERE IS WRONG, WHEN A TEAM HAS NEWLY CREATED PARENT IT WILL BE RECREATED
 
 				var editedTeam *github.Team
 
@@ -416,7 +416,7 @@ func (gh *GithubState) createTeamByIDIfNotExists(teamID string) (*github.Team, e
 					})
 
 					if err != nil {
-						return nil, errors.Wrap(err, "editing team")
+						return nil, errors.Wrap(err, "editing team" + preExistingTeam.GetName())
 					}
 
 				} else {
