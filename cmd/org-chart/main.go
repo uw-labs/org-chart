@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/url"
 	"os"
@@ -12,13 +14,15 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/lancecarlson/couchgo"
+	couch "github.com/lancecarlson/couchgo"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 
 	"github.com/google/go-github/github"
 	"github.com/pkg/errors"
 )
+
+const ROOT_EMPLOYEE = "damon_petta"
 
 func main() {
 
@@ -27,6 +31,42 @@ func main() {
 	app.Name = "org-chart management"
 
 	app.Commands = []cli.Command{
+		{
+			Name: "json-export-employees",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name: "data-url",
+				},
+				cli.StringFlag{
+					Name: "output-file",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				logrus.SetLevel(logrus.DebugLevel)
+
+				orgChart, err := loadOrgChartData(c.String("data-url"))
+
+				if err != nil {
+					return errors.Wrap(err, "retrieving org chart data")
+				}
+
+				var outputWriter io.Writer
+
+				outputWriter = os.Stdout
+
+				decoder := json.NewEncoder(outputWriter)
+
+				for _, e := range orgChart.forExport() {
+					err := decoder.Encode(e)
+
+					if err != nil {
+						return errors.Wrap(err, "writing output")
+					}
+				}
+
+				return nil
+			},
+		},
 		{
 			Name: "gh-sync",
 			Flags: []cli.Flag{
@@ -141,11 +181,23 @@ func main() {
 }
 
 type Employee struct {
-	ID       string
-	Name     string
-	Github   string
-	MemberOf string
-	Team     *Team
+	ID        string
+	Name      string
+	Github    string
+	MemberOf  string
+	Team      *Team
+	Stream    string
+	Type      string
+	ReportsTo string
+}
+
+type EmployeeExport struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Stream    string `json:"stream"`
+	Type      string `json:"type"`
+	Team      string `json:"team"`
+	Reporting string `json:"reporting"`
 }
 
 type Team struct {
@@ -164,6 +216,103 @@ type OrgChart struct {
 	Teams         []*Team
 	TeamsByID     map[string]*Team
 	EmployeesByID map[string]*Employee
+}
+
+func (oc *OrgChart) forExport() []*EmployeeExport {
+	empls := []*EmployeeExport{}
+	for _, e := range oc.Employees {
+		empls = append(empls, &EmployeeExport{
+			ID:        e.ID,
+			Name:      e.Name,
+			Stream:    e.Stream,
+			Type:      e.Type,
+			Team:      oc.teamAncestryString(e.Team),
+			Reporting: oc.reportingLine(e),
+		})
+	}
+	return empls
+}
+
+func (oc *OrgChart) techLead(t *Team) *Employee {
+	if t.TeachLeadID != "" {
+		return oc.EmployeesByID[t.TeachLeadID]
+	}
+
+	if t.ParentID == "" {
+		return oc.EmployeesByID[ROOT_EMPLOYEE]
+	}
+
+	return oc.techLead(oc.TeamsByID[t.ParentID])
+}
+
+func (oc *OrgChart) productLead(t *Team) *Employee {
+
+	if t.ProductLeadID != "" {
+		return oc.EmployeesByID[t.ProductLeadID]
+	}
+
+	if t.ParentID == "" {
+		return oc.EmployeesByID[ROOT_EMPLOYEE]
+	}
+
+	return oc.productLead(oc.TeamsByID[t.ParentID])
+}
+
+func (oc *OrgChart) reportingLine(e *Employee) string {
+
+	var lead string
+
+	if e.ReportsTo != "" {
+		lead = e.ReportsTo
+	}
+
+	if e.ID == ROOT_EMPLOYEE {
+		return ""
+	}
+
+	if lead == "" {
+
+		if e.Stream == "ENGINEERING" || e.Stream == "OPERATIONS" {
+			if e.ID == e.Team.TeachLeadID {
+				lead = oc.techLead(oc.TeamsByID[e.Team.ParentID]).ID
+			} else {
+				lead = oc.techLead(e.Team).ID
+			}
+		} else {
+			if e.ID == e.Team.ProductLeadID {
+				lead = oc.productLead(oc.TeamsByID[e.Team.ParentID]).ID
+			} else {
+				lead = oc.productLead(e.Team).ID
+			}
+		}
+	}
+
+	upline := oc.reportingLine(oc.EmployeesByID[lead])
+
+	if upline == "" {
+		return lead
+	}
+
+	return fmt.Sprintf("%s::%s", upline, lead)
+
+}
+
+func (oc *OrgChart) teamAncestryString(t *Team) string {
+	path := []string{}
+
+	parent := t
+
+	for parent != nil {
+		path = append(path, parent.ID)
+		parent = oc.TeamsByID[parent.ParentID]
+	}
+
+	for i := len(path)/2 - 1; i >= 0; i-- {
+		opp := len(path) - 1 - i
+		path[i], path[opp] = path[opp], path[i]
+	}
+
+	return strings.Join(path, "::")
 }
 
 func (oc *OrgChart) organise() error {
