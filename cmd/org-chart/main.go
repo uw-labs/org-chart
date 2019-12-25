@@ -56,7 +56,43 @@ func main() {
 
 				decoder := json.NewEncoder(outputWriter)
 
-				for _, e := range orgChart.forExport() {
+				for _, e := range orgChart.employeeExports() {
+					err := decoder.Encode(e)
+
+					if err != nil {
+						return errors.Wrap(err, "writing output")
+					}
+				}
+
+				return nil
+			},
+		},
+		{
+			Name: "json-export-teams",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name: "data-url",
+				},
+				cli.StringFlag{
+					Name: "output-file",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				logrus.SetLevel(logrus.DebugLevel)
+
+				orgChart, err := loadOrgChartData(c.String("data-url"))
+
+				if err != nil {
+					return errors.Wrap(err, "retrieving org chart data")
+				}
+
+				var outputWriter io.Writer
+
+				outputWriter = os.Stdout
+
+				decoder := json.NewEncoder(outputWriter)
+
+				for _, e := range orgChart.teamExports() {
 					err := decoder.Encode(e)
 
 					if err != nil {
@@ -209,6 +245,28 @@ type Team struct {
 	ParentGithubID string
 	TeachLeadID    string `json:"techLead"`
 	ProductLeadID  string `json:"productLead"`
+	Vacancies      map[string]int
+	Backfills      map[string]int
+}
+
+type TeamExport struct {
+	ID                   string `json:"id"`
+	Name                 string `json:"name"`
+	Parents              string `json:"parents"`
+	TeachLeadID          string `json:"techLead"`
+	ProductLeadID        string `json:"productLead"`
+	Vacancies            int    `json:"vacancies.all"`
+	VacanciesEngineering int    `json:"vacancies.engineering"`
+	VacanciesProduct     int    `json:"vacancies.product"`
+	VacanciesOperations  int    `json:"vacancies.operations"`
+	VacanciesPortfolio   int    `json:"vacancies.portfolio"`
+	VacanciesDesign      int    `json:"vacancies.design"`
+	Backfills            int    `json:"backfills.all"`
+	BackfillsEngineering int    `json:"backfills.engineering"`
+	BackfillsProduct     int    `json:"backfills.product"`
+	BackfillsOperations  int    `json:"backfills.operations"`
+	BackfillsPortfolio   int    `json:"backfills.portfolio"`
+	BackfillsDesign      int    `json:"backfills.design"`
 }
 
 type OrgChart struct {
@@ -218,7 +276,7 @@ type OrgChart struct {
 	EmployeesByID map[string]*Employee
 }
 
-func (oc *OrgChart) forExport() []*EmployeeExport {
+func (oc *OrgChart) employeeExports() []*EmployeeExport {
 	empls := []*EmployeeExport{}
 	for _, e := range oc.Employees {
 		empls = append(empls, &EmployeeExport{
@@ -226,11 +284,61 @@ func (oc *OrgChart) forExport() []*EmployeeExport {
 			Name:      e.Name,
 			Stream:    e.Stream,
 			Type:      e.Type,
-			Team:      oc.teamAncestryString(e.Team),
+			Team:      oc.teamAncestryString(e.Team, true),
 			Reporting: oc.reportingLine(e),
 		})
 	}
 	return empls
+}
+
+func (oc *OrgChart) teamExports() []*TeamExport {
+	tms := []*TeamExport{}
+	for _, t := range oc.Teams {
+		tms = append(tms, &TeamExport{
+			ID:                   t.ID,
+			Name:                 t.Name,
+			Parents:              oc.teamAncestryString(t, false),
+			TeachLeadID:          oc.techLead(t).ID,
+			ProductLeadID:        oc.productLead(t).ID,
+			Vacancies:            oc.vacancies(t, ""),
+			VacanciesEngineering: oc.vacancies(t, "engineering"),
+			VacanciesProduct:     oc.vacancies(t, "product"),
+			VacanciesOperations:  oc.vacancies(t, "operations"),
+			VacanciesPortfolio:   oc.vacancies(t, "portfolio"),
+			VacanciesDesign:      oc.vacancies(t, "design"),
+			Backfills:            oc.backfills(t, ""),
+			BackfillsEngineering: oc.backfills(t, "engineering"),
+			BackfillsProduct:     oc.backfills(t, "product"),
+			BackfillsOperations:  oc.backfills(t, "operations"),
+			BackfillsPortfolio:   oc.backfills(t, "portfolio"),
+			BackfillsDesign:      oc.backfills(t, "design"),
+		})
+	}
+	return tms
+}
+
+func (oc *OrgChart) vacancies(t *Team, stream string) int {
+	vac := 0
+
+	for s, i := range t.Vacancies {
+		if stream == "" || strings.ToUpper(s) == strings.ToUpper(stream) {
+			vac += i
+		}
+	}
+
+	return vac
+}
+
+func (oc *OrgChart) backfills(t *Team, stream string) int {
+	vac := 0
+
+	for s, i := range t.Backfills {
+		if stream == "" || strings.ToUpper(s) == strings.ToUpper(stream) {
+			vac += i
+		}
+	}
+
+	return vac
 }
 
 func (oc *OrgChart) techLead(t *Team) *Employee {
@@ -297,7 +405,7 @@ func (oc *OrgChart) reportingLine(e *Employee) string {
 
 }
 
-func (oc *OrgChart) teamAncestryString(t *Team) string {
+func (oc *OrgChart) teamAncestryString(t *Team, includeCurrent bool) string {
 	path := []string{}
 
 	parent := t
@@ -312,6 +420,9 @@ func (oc *OrgChart) teamAncestryString(t *Team) string {
 		path[i], path[opp] = path[opp], path[i]
 	}
 
+	if !includeCurrent {
+		path = path[0 : len(path)-1]
+	}
 	return strings.Join(path, "::")
 }
 
