@@ -530,12 +530,13 @@ class AddPersonDialog extends React.Component {
 
                 <SelectField
                     onChange={(_, __, val) => {
-                        this.setState({reportsTo: val})
+                        this.setState({reportsTo: val === "--inherit--" ? undefined : val})
                     }}
                     fullWidth={true}
                     value={this.state.reportsTo}
                     floatingLabelText={"Reports to"}
                 >
+                    <MenuItem key={"_report-none"} value={"--inherit--"} primaryText={""}/>
                     {this.props.employees.map(t => (
                         <MenuItem key={t.id} value={t.id} primaryText={t.name}/>
                     ))}
