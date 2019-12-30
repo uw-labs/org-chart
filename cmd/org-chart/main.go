@@ -6,10 +6,16 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
 
+	"google.golang.org/api/googleapi"
+
+	"google.golang.org/api/option"
+
+	"cloud.google.com/go/bigquery"
 	"github.com/google/go-querystring/query"
 
 	"golang.org/x/oauth2"
@@ -31,6 +37,117 @@ func main() {
 	app.Name = "org-chart management"
 
 	app.Commands = []cli.Command{
+		{
+			Name: "bq-import",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name: "data-url",
+				},
+				cli.StringFlag{
+					Name: "bq-project-id",
+				},
+				cli.StringFlag{
+					Name: "bq-credentials-file",
+				},
+			},
+			Action: func(c *cli.Context) error {
+
+				ctx := context.Background()
+				client, err := bigquery.NewClient(
+					ctx,
+					c.String("bq-project-id"),
+					option.WithCredentialsFile(c.String("bq-credentials-file")),
+				)
+				if err != nil {
+					return errors.Wrap(err, "creating google client")
+				}
+
+				dataset := client.Dataset("org_chart")
+
+				err = dataset.Create(ctx, &bigquery.DatasetMetadata{
+					Name:        "Org Chart",
+					Description: "holds IT org chart exports",
+					Location:    "eu",
+				})
+
+				if err != nil {
+					if e, ok := err.(*googleapi.Error); ok && e.Code == http.StatusConflict {
+						// already exists
+					} else {
+						return errors.Wrap(err, "creating dataset")
+					}
+				}
+
+				employeesTable := dataset.Table("employees")
+				teamsTable := dataset.Table("teams")
+
+				employeesSchema, err := bigquery.InferSchema(EmployeeExport{})
+
+				if err != nil {
+					return errors.Wrap(err, "inferring employee schema")
+				}
+
+				err = employeesTable.Create(ctx, &bigquery.TableMetadata{
+					Name:                   "Employees",
+					Description:            "holds time partitioned export of Tech employees",
+					TimePartitioning:       &bigquery.TimePartitioning{},
+					RequirePartitionFilter: true,
+					Schema:                 employeesSchema,
+				})
+
+				if err != nil {
+					if err != nil {
+						if e, ok := err.(*googleapi.Error); ok && e.Code == http.StatusConflict {
+							// already exists
+						} else {
+							return errors.Wrap(err, "creating employees table")
+						}
+					}
+				}
+
+				teamsSchema, err := bigquery.InferSchema(TeamExport{})
+
+				if err != nil {
+					return errors.Wrap(err, "inferring teams schema")
+				}
+
+				err = teamsTable.Create(ctx, &bigquery.TableMetadata{
+					Name:                   "Teams",
+					Description:            "holds time partitioned export of Tech teams",
+					TimePartitioning:       &bigquery.TimePartitioning{},
+					RequirePartitionFilter: true,
+					Schema:                 teamsSchema,
+				})
+
+				if err != nil {
+					if e, ok := err.(*googleapi.Error); ok && e.Code == http.StatusConflict {
+						// already exists
+					} else {
+						return errors.Wrap(err, "creating teams table")
+					}
+				}
+
+				orgChart, err := loadOrgChartData(c.String("data-url"))
+
+				if err != nil {
+					return errors.Wrap(err, "retrieving org chart data")
+				}
+
+				employeesInserter := employeesTable.Inserter()
+
+				if err := employeesInserter.Put(ctx, orgChart.employeeExports()); err != nil {
+					return errors.Wrap(err, "inserting employees")
+				}
+
+				teamsInserter := teamsTable.Inserter()
+
+				if err := teamsInserter.Put(ctx, orgChart.teamExports()); err != nil {
+					return errors.Wrap(err, "inserting teams")
+				}
+
+				return nil
+			},
+		},
 		{
 			Name: "json-export-employees",
 			Flags: []cli.Flag{

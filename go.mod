@@ -3,6 +3,7 @@ module github.com/utilitywarehouse/org-chart
 go 1.13
 
 require (
+	cloud.google.com/go/bigquery v1.3.0 // indirect
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/go-querystring v1.0.0
 	github.com/lancecarlson/couchgo v0.0.0-20161106171109-36277681d9bf
