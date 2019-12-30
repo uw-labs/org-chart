@@ -80,6 +80,7 @@ func main() {
 
 				employeesTable := dataset.Table("employees")
 				teamsTable := dataset.Table("teams")
+				vacanciesTable := dataset.Table("vacancies")
 
 				employeesSchema, err := bigquery.InferSchema(EmployeeExport{})
 
@@ -91,7 +92,7 @@ func main() {
 					Name:                   "Employees",
 					Description:            "holds time partitioned export of Tech employees",
 					TimePartitioning:       &bigquery.TimePartitioning{},
-					RequirePartitionFilter: true,
+					RequirePartitionFilter: false,
 					Schema:                 employeesSchema,
 				})
 
@@ -115,7 +116,7 @@ func main() {
 					Name:                   "Teams",
 					Description:            "holds time partitioned export of Tech teams",
 					TimePartitioning:       &bigquery.TimePartitioning{},
-					RequirePartitionFilter: true,
+					RequirePartitionFilter: false,
 					Schema:                 teamsSchema,
 				})
 
@@ -124,6 +125,28 @@ func main() {
 						// already exists
 					} else {
 						return errors.Wrap(err, "creating teams table")
+					}
+				}
+
+				vacanciesSchema, err := bigquery.InferSchema(VacancyExport{})
+
+				if err != nil {
+					return errors.Wrap(err, "inferring vacancies schema")
+				}
+
+				err = vacanciesTable.Create(ctx, &bigquery.TableMetadata{
+					Name:                   "Vacancies",
+					Description:            "holds vacancies per team",
+					TimePartitioning:       &bigquery.TimePartitioning{},
+					RequirePartitionFilter: false,
+					Schema:                 vacanciesSchema,
+				})
+
+				if err != nil {
+					if e, ok := err.(*googleapi.Error); ok && e.Code == http.StatusConflict {
+						// already exists
+					} else {
+						return errors.Wrap(err, "creating vacancies table")
 					}
 				}
 
@@ -143,6 +166,12 @@ func main() {
 
 				if err := teamsInserter.Put(ctx, orgChart.teamExports()); err != nil {
 					return errors.Wrap(err, "inserting teams")
+				}
+
+				vacanciesInserter := vacanciesTable.Inserter()
+
+				if err := vacanciesInserter.Put(ctx, orgChart.vacanciesExports()); err != nil {
+					return errors.Wrap(err, "inserting vacancies")
 				}
 
 				return nil
@@ -367,23 +396,18 @@ type Team struct {
 }
 
 type TeamExport struct {
-	ID                   string `json:"id"`
-	Name                 string `json:"name"`
-	Parents              string `json:"parents"`
-	TeachLeadID          string `json:"techLead"`
-	ProductLeadID        string `json:"productLead"`
-	Vacancies            int    `json:"vacancies.all"`
-	VacanciesEngineering int    `json:"vacancies.engineering"`
-	VacanciesProduct     int    `json:"vacancies.product"`
-	VacanciesOperations  int    `json:"vacancies.operations"`
-	VacanciesPortfolio   int    `json:"vacancies.portfolio"`
-	VacanciesDesign      int    `json:"vacancies.design"`
-	Backfills            int    `json:"backfills.all"`
-	BackfillsEngineering int    `json:"backfills.engineering"`
-	BackfillsProduct     int    `json:"backfills.product"`
-	BackfillsOperations  int    `json:"backfills.operations"`
-	BackfillsPortfolio   int    `json:"backfills.portfolio"`
-	BackfillsDesign      int    `json:"backfills.design"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Parents       string `json:"parents"`
+	TeachLeadID   string `json:"techLead"`
+	ProductLeadID string `json:"productLead"`
+}
+
+type VacancyExport struct {
+	Type   string `json:"type"`
+	TeamID string `json:"team"`
+	Stream string `json:"stream"`
+	Count  int    `json:"count"`
 }
 
 type OrgChart struct {
@@ -391,6 +415,33 @@ type OrgChart struct {
 	Teams         []*Team
 	TeamsByID     map[string]*Team
 	EmployeesByID map[string]*Employee
+}
+
+func (oc *OrgChart) vacanciesExports() []*VacancyExport {
+	vacs := make([]*VacancyExport, 0, 0)
+	streams := []string{"engineering", "product", "operations", "portfolio", "design"}
+
+	for _, t := range oc.Teams {
+		for _, s := range streams {
+			if v := oc.vacancies(t, s); v > 0 {
+				vacs = append(vacs, &VacancyExport{
+					Type:   "new",
+					TeamID: t.ID,
+					Stream: s,
+					Count:  v,
+				})
+			}
+			if v := oc.backfills(t, s); v > 0 {
+				vacs = append(vacs, &VacancyExport{
+					Type:   "backfill",
+					TeamID: t.ID,
+					Stream: s,
+					Count:  v,
+				})
+			}
+		}
+	}
+	return vacs
 }
 
 func (oc *OrgChart) employeeExports() []*EmployeeExport {
@@ -412,23 +463,11 @@ func (oc *OrgChart) teamExports() []*TeamExport {
 	tms := []*TeamExport{}
 	for _, t := range oc.Teams {
 		tms = append(tms, &TeamExport{
-			ID:                   t.ID,
-			Name:                 t.Name,
-			Parents:              oc.teamAncestryString(t, false),
-			TeachLeadID:          oc.techLead(t).ID,
-			ProductLeadID:        oc.productLead(t).ID,
-			Vacancies:            oc.vacancies(t, ""),
-			VacanciesEngineering: oc.vacancies(t, "engineering"),
-			VacanciesProduct:     oc.vacancies(t, "product"),
-			VacanciesOperations:  oc.vacancies(t, "operations"),
-			VacanciesPortfolio:   oc.vacancies(t, "portfolio"),
-			VacanciesDesign:      oc.vacancies(t, "design"),
-			Backfills:            oc.backfills(t, ""),
-			BackfillsEngineering: oc.backfills(t, "engineering"),
-			BackfillsProduct:     oc.backfills(t, "product"),
-			BackfillsOperations:  oc.backfills(t, "operations"),
-			BackfillsPortfolio:   oc.backfills(t, "portfolio"),
-			BackfillsDesign:      oc.backfills(t, "design"),
+			ID:            t.ID,
+			Name:          t.Name,
+			Parents:       oc.teamAncestryString(t, false),
+			TeachLeadID:   oc.techLead(t).ID,
+			ProductLeadID: oc.productLead(t).ID,
 		})
 	}
 	return tms
