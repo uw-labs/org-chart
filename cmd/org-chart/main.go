@@ -2,23 +2,33 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
 
+	"google.golang.org/api/googleapi"
+
+	"google.golang.org/api/option"
+
+	"cloud.google.com/go/bigquery"
 	"github.com/google/go-querystring/query"
 
 	"golang.org/x/oauth2"
 
-	"github.com/lancecarlson/couchgo"
+	couch "github.com/lancecarlson/couchgo"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 
 	"github.com/google/go-github/github"
 	"github.com/pkg/errors"
 )
+
+const ROOT_EMPLOYEE = "damon_petta"
 
 func main() {
 
@@ -27,6 +37,218 @@ func main() {
 	app.Name = "org-chart management"
 
 	app.Commands = []cli.Command{
+		{
+			Name: "bq-import",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name: "data-url",
+				},
+				cli.StringFlag{
+					Name: "bq-project-id",
+				},
+				cli.StringFlag{
+					Name: "bq-credentials-file",
+				},
+			},
+			Action: func(c *cli.Context) error {
+
+				ctx := context.Background()
+				client, err := bigquery.NewClient(
+					ctx,
+					c.String("bq-project-id"),
+					option.WithCredentialsFile(c.String("bq-credentials-file")),
+				)
+				if err != nil {
+					return errors.Wrap(err, "creating google client")
+				}
+
+				dataset := client.Dataset("org_chart")
+
+				err = dataset.Create(ctx, &bigquery.DatasetMetadata{
+					Name:        "Org Chart",
+					Description: "holds IT org chart exports",
+					Location:    "eu",
+				})
+
+				if err != nil {
+					if e, ok := err.(*googleapi.Error); ok && e.Code == http.StatusConflict {
+						// already exists
+					} else {
+						return errors.Wrap(err, "creating dataset")
+					}
+				}
+
+				employeesTable := dataset.Table("employees")
+				teamsTable := dataset.Table("teams")
+				vacanciesTable := dataset.Table("vacancies")
+
+				employeesSchema, err := bigquery.InferSchema(EmployeeExport{})
+
+				if err != nil {
+					return errors.Wrap(err, "inferring employee schema")
+				}
+
+				err = employeesTable.Create(ctx, &bigquery.TableMetadata{
+					Name:                   "Employees",
+					Description:            "holds time partitioned export of Tech employees",
+					TimePartitioning:       &bigquery.TimePartitioning{},
+					RequirePartitionFilter: false,
+					Schema:                 employeesSchema,
+				})
+
+				if err != nil {
+					if err != nil {
+						if e, ok := err.(*googleapi.Error); ok && e.Code == http.StatusConflict {
+							// already exists
+						} else {
+							return errors.Wrap(err, "creating employees table")
+						}
+					}
+				}
+
+				teamsSchema, err := bigquery.InferSchema(TeamExport{})
+
+				if err != nil {
+					return errors.Wrap(err, "inferring teams schema")
+				}
+
+				err = teamsTable.Create(ctx, &bigquery.TableMetadata{
+					Name:                   "Teams",
+					Description:            "holds time partitioned export of Tech teams",
+					TimePartitioning:       &bigquery.TimePartitioning{},
+					RequirePartitionFilter: false,
+					Schema:                 teamsSchema,
+				})
+
+				if err != nil {
+					if e, ok := err.(*googleapi.Error); ok && e.Code == http.StatusConflict {
+						// already exists
+					} else {
+						return errors.Wrap(err, "creating teams table")
+					}
+				}
+
+				vacanciesSchema, err := bigquery.InferSchema(VacancyExport{})
+
+				if err != nil {
+					return errors.Wrap(err, "inferring vacancies schema")
+				}
+
+				err = vacanciesTable.Create(ctx, &bigquery.TableMetadata{
+					Name:                   "Vacancies",
+					Description:            "holds vacancies per team",
+					TimePartitioning:       &bigquery.TimePartitioning{},
+					RequirePartitionFilter: false,
+					Schema:                 vacanciesSchema,
+				})
+
+				if err != nil {
+					if e, ok := err.(*googleapi.Error); ok && e.Code == http.StatusConflict {
+						// already exists
+					} else {
+						return errors.Wrap(err, "creating vacancies table")
+					}
+				}
+
+				orgChart, err := loadOrgChartData(c.String("data-url"))
+
+				if err != nil {
+					return errors.Wrap(err, "retrieving org chart data")
+				}
+
+				employeesInserter := employeesTable.Inserter()
+
+				if err := employeesInserter.Put(ctx, orgChart.employeeExports()); err != nil {
+					return errors.Wrap(err, "inserting employees")
+				}
+
+				teamsInserter := teamsTable.Inserter()
+
+				if err := teamsInserter.Put(ctx, orgChart.teamExports()); err != nil {
+					return errors.Wrap(err, "inserting teams")
+				}
+
+				vacanciesInserter := vacanciesTable.Inserter()
+
+				if err := vacanciesInserter.Put(ctx, orgChart.vacanciesExports()); err != nil {
+					return errors.Wrap(err, "inserting vacancies")
+				}
+
+				return nil
+			},
+		},
+		{
+			Name: "json-export-employees",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name: "data-url",
+				},
+				cli.StringFlag{
+					Name: "output-file",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				logrus.SetLevel(logrus.DebugLevel)
+
+				orgChart, err := loadOrgChartData(c.String("data-url"))
+
+				if err != nil {
+					return errors.Wrap(err, "retrieving org chart data")
+				}
+
+				var outputWriter io.Writer
+
+				outputWriter = os.Stdout
+
+				decoder := json.NewEncoder(outputWriter)
+
+				for _, e := range orgChart.employeeExports() {
+					err := decoder.Encode(e)
+
+					if err != nil {
+						return errors.Wrap(err, "writing output")
+					}
+				}
+
+				return nil
+			},
+		},
+		{
+			Name: "json-export-teams",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name: "data-url",
+				},
+				cli.StringFlag{
+					Name: "output-file",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				logrus.SetLevel(logrus.DebugLevel)
+
+				orgChart, err := loadOrgChartData(c.String("data-url"))
+
+				if err != nil {
+					return errors.Wrap(err, "retrieving org chart data")
+				}
+
+				var outputWriter io.Writer
+
+				outputWriter = os.Stdout
+
+				decoder := json.NewEncoder(outputWriter)
+
+				for _, e := range orgChart.teamExports() {
+					err := decoder.Encode(e)
+
+					if err != nil {
+						return errors.Wrap(err, "writing output")
+					}
+				}
+
+				return nil
+			},
+		},
 		{
 			Name: "gh-sync",
 			Flags: []cli.Flag{
@@ -141,11 +363,23 @@ func main() {
 }
 
 type Employee struct {
-	ID       string
-	Name     string
-	Github   string
-	MemberOf string
-	Team     *Team
+	ID        string
+	Name      string
+	Github    string
+	MemberOf  string
+	Team      *Team
+	Stream    string
+	Type      string
+	ReportsTo string
+}
+
+type EmployeeExport struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Stream    string `json:"stream"`
+	Type      string `json:"type"`
+	Team      string `json:"team"`
+	Reporting string `json:"reporting"`
 }
 
 type Team struct {
@@ -157,6 +391,23 @@ type Team struct {
 	ParentGithubID string
 	TeachLeadID    string `json:"techLead"`
 	ProductLeadID  string `json:"productLead"`
+	Vacancies      map[string]int
+	Backfills      map[string]int
+}
+
+type TeamExport struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Parents       string `json:"parents"`
+	TeachLeadID   string `json:"techLead"`
+	ProductLeadID string `json:"productLead"`
+}
+
+type VacancyExport struct {
+	Type   string `json:"type"`
+	TeamID string `json:"team"`
+	Stream string `json:"stream"`
+	Count  int    `json:"count"`
 }
 
 type OrgChart struct {
@@ -164,6 +415,171 @@ type OrgChart struct {
 	Teams         []*Team
 	TeamsByID     map[string]*Team
 	EmployeesByID map[string]*Employee
+}
+
+func (oc *OrgChart) vacanciesExports() []*VacancyExport {
+	vacs := make([]*VacancyExport, 0, 0)
+	streams := []string{"engineering", "product", "operations", "portfolio", "design"}
+
+	for _, t := range oc.Teams {
+		for _, s := range streams {
+			if v := oc.vacancies(t, s); v > 0 {
+				vacs = append(vacs, &VacancyExport{
+					Type:   "new",
+					TeamID: t.ID,
+					Stream: s,
+					Count:  v,
+				})
+			}
+			if v := oc.backfills(t, s); v > 0 {
+				vacs = append(vacs, &VacancyExport{
+					Type:   "backfill",
+					TeamID: t.ID,
+					Stream: s,
+					Count:  v,
+				})
+			}
+		}
+	}
+	return vacs
+}
+
+func (oc *OrgChart) employeeExports() []*EmployeeExport {
+	empls := []*EmployeeExport{}
+	for _, e := range oc.Employees {
+		empls = append(empls, &EmployeeExport{
+			ID:        e.ID,
+			Name:      e.Name,
+			Stream:    e.Stream,
+			Type:      e.Type,
+			Team:      oc.teamAncestryString(e.Team, true),
+			Reporting: oc.reportingLine(e),
+		})
+	}
+	return empls
+}
+
+func (oc *OrgChart) teamExports() []*TeamExport {
+	tms := []*TeamExport{}
+	for _, t := range oc.Teams {
+		tms = append(tms, &TeamExport{
+			ID:            t.ID,
+			Name:          t.Name,
+			Parents:       oc.teamAncestryString(t, false),
+			TeachLeadID:   oc.techLead(t).ID,
+			ProductLeadID: oc.productLead(t).ID,
+		})
+	}
+	return tms
+}
+
+func (oc *OrgChart) vacancies(t *Team, stream string) int {
+	vac := 0
+
+	for s, i := range t.Vacancies {
+		if stream == "" || strings.ToUpper(s) == strings.ToUpper(stream) {
+			vac += i
+		}
+	}
+
+	return vac
+}
+
+func (oc *OrgChart) backfills(t *Team, stream string) int {
+	vac := 0
+
+	for s, i := range t.Backfills {
+		if stream == "" || strings.ToUpper(s) == strings.ToUpper(stream) {
+			vac += i
+		}
+	}
+
+	return vac
+}
+
+func (oc *OrgChart) techLead(t *Team) *Employee {
+	if t.TeachLeadID != "" {
+		return oc.EmployeesByID[t.TeachLeadID]
+	}
+
+	if t.ParentID == "" {
+		return oc.EmployeesByID[ROOT_EMPLOYEE]
+	}
+
+	return oc.techLead(oc.TeamsByID[t.ParentID])
+}
+
+func (oc *OrgChart) productLead(t *Team) *Employee {
+
+	if t.ProductLeadID != "" {
+		return oc.EmployeesByID[t.ProductLeadID]
+	}
+
+	if t.ParentID == "" {
+		return oc.EmployeesByID[ROOT_EMPLOYEE]
+	}
+
+	return oc.productLead(oc.TeamsByID[t.ParentID])
+}
+
+func (oc *OrgChart) reportingLine(e *Employee) string {
+
+	var lead string
+
+	if e.ReportsTo != "" {
+		lead = e.ReportsTo
+	}
+
+	if e.ID == ROOT_EMPLOYEE {
+		return ""
+	}
+
+	if lead == "" {
+
+		if e.Stream == "ENGINEERING" || e.Stream == "OPERATIONS" {
+			if e.ID == e.Team.TeachLeadID {
+				lead = oc.techLead(oc.TeamsByID[e.Team.ParentID]).ID
+			} else {
+				lead = oc.techLead(e.Team).ID
+			}
+		} else {
+			if e.ID == e.Team.ProductLeadID {
+				lead = oc.productLead(oc.TeamsByID[e.Team.ParentID]).ID
+			} else {
+				lead = oc.productLead(e.Team).ID
+			}
+		}
+	}
+
+	upline := oc.reportingLine(oc.EmployeesByID[lead])
+
+	if upline == "" {
+		return lead
+	}
+
+	return fmt.Sprintf("%s::%s", upline, lead)
+
+}
+
+func (oc *OrgChart) teamAncestryString(t *Team, includeCurrent bool) string {
+	path := []string{}
+
+	parent := t
+
+	for parent != nil {
+		path = append(path, parent.ID)
+		parent = oc.TeamsByID[parent.ParentID]
+	}
+
+	for i := len(path)/2 - 1; i >= 0; i-- {
+		opp := len(path) - 1 - i
+		path[i], path[opp] = path[opp], path[i]
+	}
+
+	if !includeCurrent {
+		path = path[0 : len(path)-1]
+	}
+	return strings.Join(path, "::")
 }
 
 func (oc *OrgChart) organise() error {
