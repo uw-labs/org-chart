@@ -239,7 +239,14 @@ class Organisation {
 
     parseData(data) {
         this.employees = data.employees.map(e => Object.assign(new Employee(), e))
-        this.teams = data.teams.map(e => Object.assign(new Team(), e))
+        this.teams = data.teams.map(e => {
+            const o = Object.assign(new Team(), e)
+            if (o.techLead) {
+                o.engineeringLead = o.techLead
+            }
+            delete o.techLead
+            return o
+        })
         this.rootEmployee = data.rootEmployee || "damon_petta";
 
         if (data.streams) {
