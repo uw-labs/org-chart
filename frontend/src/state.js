@@ -71,6 +71,9 @@ class Organisation {
             teams: this.teamHierarchy(),
             reporting: this.reportingHierarchy(),
             rootEmployee: this.rootEmployee,
+            kinds: KIND,
+            types: TYPE,
+            streams: STREAM,
         }
     }
 
@@ -315,7 +318,14 @@ class Organisation {
 
         await couch.put(
             "chart",
-            {employees: this.employees, teams: this.teams},
+            {
+                employees: this.employees,
+                teams: this.teams,
+                streams: STREAM,
+                kinds: KIND,
+                types: TYPE,
+                rootEmployee: this.rootEmployee,
+            },
             this.documentRevision,
         )
         .then(res => {
