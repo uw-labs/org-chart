@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/jszwec/csvutil"
+
 	"google.golang.org/api/googleapi"
 
 	"google.golang.org/api/option"
@@ -186,6 +188,12 @@ func main() {
 				cli.StringFlag{
 					Name: "output-file",
 				},
+				cli.BoolFlag{
+					Name: "json",
+				},
+				cli.BoolFlag{
+					Name: "csv",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				logrus.SetLevel(logrus.DebugLevel)
@@ -202,7 +210,21 @@ func main() {
 
 				decoder := json.NewEncoder(outputWriter)
 
+				if c.Bool("csv") {
+
+					b, err := csvutil.Marshal(orgChart.employeeExports())
+
+					if err != nil {
+						return errors.Wrap(err, "writing output")
+					}
+
+					outputWriter.Write(b)
+					return nil
+
+				}
+
 				for _, e := range orgChart.employeeExports() {
+
 					err := decoder.Encode(e)
 
 					if err != nil {
@@ -222,6 +244,12 @@ func main() {
 				cli.StringFlag{
 					Name: "output-file",
 				},
+				cli.BoolFlag{
+					Name: "json",
+				},
+				cli.BoolFlag{
+					Name: "csv",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				logrus.SetLevel(logrus.DebugLevel)
@@ -235,6 +263,19 @@ func main() {
 				var outputWriter io.Writer
 
 				outputWriter = os.Stdout
+
+				if c.Bool("csv") {
+
+					b, err := csvutil.Marshal(orgChart.teamExports())
+
+					if err != nil {
+						return errors.Wrap(err, "writing output")
+					}
+
+					outputWriter.Write(b)
+					return nil
+
+				}
 
 				decoder := json.NewEncoder(outputWriter)
 

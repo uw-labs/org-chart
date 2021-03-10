@@ -321,9 +321,9 @@ class Organisation {
             {
                 employees: this.employees,
                 teams: this.teams,
-                streams: STREAM,
-                kinds: KIND,
-                types: TYPE,
+                streams: Object.values(STREAM),
+                kinds: Object.values(KIND),
+                types: Object.values(TYPE),
                 rootEmployee: this.rootEmployee,
             },
             this.documentRevision,

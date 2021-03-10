@@ -6,6 +6,7 @@ require (
 	cloud.google.com/go/bigquery v1.3.0 // indirect
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/go-querystring v1.0.0
+	github.com/jszwec/csvutil v1.4.0 // indirect
 	github.com/lancecarlson/couchgo v0.0.0-20161106171109-36277681d9bf
 	github.com/pkg/errors v0.8.1
 	github.com/sirupsen/logrus v1.4.2
