@@ -163,13 +163,8 @@ export default class App extends React.Component {
         this.bang()
     }
 
-    setTechLead = (team, lead) => {
-        this.props.data.setTechLead(team, lead)
-        this.bang()
-    }
-
-    setProductLead = (team, lead) => {
-        this.props.data.setProductLead(team, lead)
+    setLead = (team, lead, stream) => {
+        this.props.data.setLead(team, lead, stream)
         this.bang()
     }
 
@@ -202,8 +197,7 @@ export default class App extends React.Component {
                                       addEmployee: this.addEmployee,
                                       editEmployee: this.editEmployee,
                                       removeEmployee: this.removeEmployee,
-                                      setTechLead: this.setTechLead,
-                                      setProductLead: this.setProductLead,
+                                      setLead: this.setLead,
                                   }}/>
                     </Tab>
                     <Tab label="STATS">

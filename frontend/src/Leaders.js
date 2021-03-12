@@ -8,6 +8,7 @@ import {
     TableRow,
     TableRowColumn,
 } from 'material-ui/Table'
+import {STREAM} from "./state";
 
 function flattenTeamsFn(parents = []) {
     return function flattenTeams(r, a) {
@@ -22,9 +23,9 @@ function flattenTeamsFn(parents = []) {
     }
 }
 
-function findProductLeadNameUpwards(team, byId) {
-    if (team.productLead) {
-        return team.productLead.name
+function findLeadNameUpwards(team, byId, stream) {
+    if (team[stream]) {
+        return team[stream].name
     }
 
     let current = team.parent
@@ -33,28 +34,8 @@ function findProductLeadNameUpwards(team, byId) {
 
         if (!byId[current]) return ""
 
-        if (byId[current].productLead) {
-            return byId[current].productLead.name
-        }
-        current = byId[current].parent
-    }
-
-    return ""
-}
-
-function findTechLeadNameUpwards(team, byId) {
-    if (team.techLead) {
-        return team.techLead.name
-    }
-
-    let current = team.parent
-
-    while(current) {
-
-        if (!byId[current]) return ""
-
-        if (byId[current].techLead) {
-            return byId[current].techLead.name
+        if (byId[current][stream]) {
+            return byId[current][stream].name
         }
         current = byId[current].parent
     }
@@ -85,8 +66,9 @@ export default class Leaders extends React.Component {
                     <TableHeader adjustForCheckbox={false} enableSelectAll={false} displaySelectAll={false}>
                         <TableRow>
                             <TableHeaderColumn>Team</TableHeaderColumn>
-                            <TableHeaderColumn>Tech Lead</TableHeaderColumn>
-                            <TableHeaderColumn>Product Lead</TableHeaderColumn>
+                            {Object.keys(STREAM).map(val => (
+                                <TableHeaderColumn>{val.charAt(0).toUpperCase()+val.slice(1).toLowerCase().replace("_", " ")} Lead</TableHeaderColumn>
+                            ))}
                         </TableRow>
                     </TableHeader>
                     <TableBody displayRowCheckbox={false}>
@@ -95,8 +77,9 @@ export default class Leaders extends React.Component {
                                     <TableRowColumn key={`${t.id}`} style={{paddingLeft: `${20*t.parents.length+20}px`}}>
                                         {t.name}
                                     </TableRowColumn>
-                                    <TableRowColumn style={{opacity: t.techLead ? 1 : 0.5}} key={`tlead_${t.id}`}>{findTechLeadNameUpwards(t, byId)}</TableRowColumn>
-                                    <TableRowColumn style={{opacity: t.productLead ? 1 : 0.5}} key={`plead_${t.id}`}>{findProductLeadNameUpwards(t, byId)}</TableRowColumn>
+                                    {Object.keys(STREAM).map(val => (
+                                        <TableRowColumn style={{opacity: t[val.toLowerCase()+"Lead"] ? 1 : 0.5}} key={`${val}${t.id}`}>{findLeadNameUpwards(t, byId, val.toLowerCase()+"Lead")}</TableRowColumn>
+                                    ))}
                                 </TableRow>
                             ))}
                     </TableBody>

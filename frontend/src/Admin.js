@@ -14,8 +14,11 @@ import FlatButton from 'material-ui/FlatButton'
 import Dialog from 'material-ui/Dialog';
 import IconButton from 'material-ui/IconButton';
 import EditIcon from 'material-ui/svg-icons/editor/mode-edit';
+import {Table, TableHeader, TableHeaderColumn} from 'material-ui/Table';
 
 import {flattenTeamHierarchyExcluding, KIND, STREAM, TYPE} from './state'
+import {TableBody, TableRow, TableRowColumn} from "material-ui";
+
 
 
 function debounce(func, wait, immediate) {
@@ -142,21 +145,13 @@ class TeamDetails extends React.Component {
     }
 
     render() {
-        let {root, team, reparentTeam, removeFromTeam, changeHeadcount, changeBackfills, removeTeam, employees, setProductLead, setTechLead} = this.props
+        let {root, team, reparentTeam, removeFromTeam, changeHeadcount, changeBackfills, removeTeam, employees, setLead} = this.props
 
         if (!team) {
             return null
         }
 
-        let upstreamEmlpoyeesStreams = [...new Set(collectUpstreamEmployees([], team).map(e => e.stream))].sort()
-
-        if (upstreamEmlpoyeesStreams.indexOf(STREAM.PORTFOLIO) !== -1) {
-            upstreamEmlpoyeesStreams = [STREAM.PORTFOLIO]
-        } else if (upstreamEmlpoyeesStreams.indexOf(STREAM.OPERATIONS) !== -1) {
-            upstreamEmlpoyeesStreams = [STREAM.OPERATIONS]
-        } else {
-            upstreamEmlpoyeesStreams = [STREAM.ENGINEERING, STREAM.PRODUCT, STREAM.DATA, STREAM.DESIGN]
-        }
+        let upstreamEmlpoyeesStreams = Object.values(STREAM)
 
         return (
 
@@ -182,54 +177,45 @@ class TeamDetails extends React.Component {
                     ))}
                 </SelectField>
 
-                <CardHeader title={"Vacancies"}/>
+                <Table size="small" selectable={false}>
+                    <TableHeader displaySelectAll={false}>
+                        <TableRow selectable={false}>
+                            <TableHeaderColumn>Stream</TableHeaderColumn>
+                            <TableHeaderColumn>Vacancies</TableHeaderColumn>
+                            <TableHeaderColumn>Backfills</TableHeaderColumn>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody displayRowCheckbox={false}>
+                        {[...new Set(Object.keys(team.vacancies).concat(upstreamEmlpoyeesStreams))].sort().map(s => (
+                        <TableRow selectable={false}>
+                            <TableRowColumn>{s}</TableRowColumn>
+                            <TableRowColumn>
+                                <TextField onChange={(_, val) => changeHeadcount(team.id, s, val)}
+                                           value={team.vacancies[s] !== undefined ? team.vacancies[s] : ""}/>
+                            </TableRowColumn>
+                            <TableRowColumn>
+                                <TextField onChange={(_, val) => changeBackfills(team.id, s, val)}
+                                           value={team.backfills[s] !== undefined ? team.backfills[s] : ""}/>
+                            </TableRowColumn>
+                        </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
 
-                <Flex p={0}>
-                    {[...new Set(Object.keys(team.vacancies).concat(upstreamEmlpoyeesStreams))].sort().map(s => (
-                        <Box pb={0} w={1 / 4} style={{alignSelf: "flex-start"}} key={`vacancies_${s}`}>
-                            <TextField onChange={(_, val) => changeHeadcount(team.id, s, val)}
-                                       floatingLabelText={s.toLowerCase()}
-                                       value={team.vacancies[s] !== undefined ? team.vacancies[s] : ""}/>
-                        </Box>
-                    ))}
-                </Flex>
-
-                <CardHeader title={"Backfills"}/>
-
-                <Flex p={0}>
-                    {[...new Set(Object.keys(team.vacancies).concat(upstreamEmlpoyeesStreams))].sort().map(s => (
-                        <Box pb={0} w={1 / 4} style={{alignSelf: "flex-start"}} key={`backfills_${s}`}>
-                            <TextField onChange={(_, val) => changeBackfills(team.id, s, val)}
-                                       floatingLabelText={s.toLowerCase()}
-                                       value={team.backfills[s] !== undefined ? team.backfills[s] : ""}/>
-                        </Box>
-                    ))}
-                </Flex>
-
-
-                <SelectField
-                    floatingLabelText="Tech lead"
-                    fullWidth={true}
-                    value={team.techLead ? team.techLead.id : null}
-                    onChange={(_, __, i) => setTechLead(team.id, i)}
-                >
-                    <MenuItem value={null} primaryText="" />
-                    {employees.map(t => (
-                        <MenuItem key={t.id} value={t.id} primaryText={t.name}/>
-                    ))}
-                </SelectField>
-
-                <SelectField
-                    floatingLabelText="Product lead"
-                    fullWidth={true}
-                    value={team.productLead ? team.productLead.id : null}
-                    onChange={(_, __, i) => setProductLead(team.id, i)}
-                >
-                    <MenuItem value={null} primaryText="" />
-                    {employees.filter(e => e.stream === STREAM.PRODUCT).map(t => (
-                        <MenuItem key={t.id} value={t.id} primaryText={t.name}/>
-                    ))}
-                </SelectField>
+                {Object.values(STREAM).map(val => (
+                    <SelectField
+                        key={val}
+                        floatingLabelText={(val.toLowerCase().charAt(0).toUpperCase() + val.toLowerCase().slice(1)+" lead").replace("_", " ")}
+                        fullWidth={true}
+                        value={team[val.toLowerCase()+"Lead"] ? team[val.toLowerCase()+"Lead"].id : null}
+                        onChange={(_, __, i) => setLead(team.id, i, val.toLowerCase()+"Lead")}
+                    >
+                        <MenuItem value={null} primaryText="" />
+                        {employees.map(t => (
+                            <MenuItem key={t.id} value={t.id} primaryText={t.name}/>
+                        ))}
+                    </SelectField>
+                ))}
 
                 <Subheader>Members</Subheader>
                 <List>
@@ -381,7 +367,7 @@ class AddPersonDialog extends React.Component {
         id: null,
         name: "",
         title: "",
-        stream: STREAM.ENGINEERING,
+        stream: Object.keys(STREAM)[0],
         reportsTo: null,
         github: "",
         number: "",
@@ -401,9 +387,9 @@ class AddPersonDialog extends React.Component {
             title: "",
             github: "",
             number: "",
-            stream: STREAM.ENGINEERING,
+            stream: Object.keys(STREAM)[0],
             reportsTo: null,
-            type: TYPE.EMPLOYEE,
+            type: Object.keys(TYPE)[0],
             startDate: "",
             ...nextProps.person,
         })
@@ -501,14 +487,9 @@ class AddPersonDialog extends React.Component {
                     floatingLabelText={"Stream"}
 
                 >
-
-                    <MenuItem key={STREAM.ENGINEERING} value={STREAM.ENGINEERING} primaryText={STREAM.ENGINEERING}/>
-                    <MenuItem key={STREAM.PRODUCT} value={STREAM.PRODUCT} primaryText={STREAM.PRODUCT}/>
-                    <MenuItem key={STREAM.DATA} value={STREAM.DATA} primaryText={STREAM.DATA}/>
-                    <MenuItem key={STREAM.DESIGN} value={STREAM.DESIGN} primaryText={STREAM.DESIGN}/>
-                    <MenuItem key={STREAM.OPERATIONS} value={STREAM.OPERATIONS} primaryText={STREAM.OPERATIONS}/>
-                    <MenuItem key={STREAM.PORTFOLIO} value={STREAM.PORTFOLIO} primaryText={STREAM.PORTFOLIO}/>
-
+                    {Object.keys(STREAM).map(val => (
+                        <MenuItem key={val} value={val} primaryText={val}/>
+                    ))}
                 </SelectField>
 
 
@@ -520,12 +501,9 @@ class AddPersonDialog extends React.Component {
                     value={this.state.type}
                     floatingLabelText={"Type"}
                 >
-
-                    <MenuItem key={TYPE.EMPLOYEE} value={TYPE.EMPLOYEE} primaryText={TYPE.EMPLOYEE}/>
-                    <MenuItem key={TYPE.CONTRACTOR} value={TYPE.CONTRACTOR} primaryText={TYPE.CONTRACTOR}/>
-                    <MenuItem key={TYPE.AGENCY_CONTRACTOR} value={TYPE.AGENCY_CONTRACTOR} primaryText={TYPE.AGENCY_CONTRACTOR}/>
-                    <MenuItem key={TYPE.TEMP} value={TYPE.TEMP} primaryText={TYPE.TEMP}/>
-
+                    {Object.keys(TYPE).map(val => (
+                        <MenuItem key={val} value={val} primaryText={val}/>
+                    ))}
                 </SelectField>
 
                 <SelectField
@@ -557,12 +535,12 @@ class AddTeamDialog extends React.Component {
     state = {
         open: false,
         name: "",
-        kind: KIND.SQUAD,
+        kind: Object.keys(KIND)[0],
         parent: ""
     };
 
     handleOpen = () => {
-        this.setState({open: true, name: "", kind: KIND.SQUAD, parent: "", description: ""});
+        this.setState({open: true, name: "", kind: Object.keys(KIND)[0], parent: "", description: ""});
     };
 
     handleClose = () => {

@@ -2,7 +2,7 @@ import URL from 'url-parse'
 
 import Couch from "davenport";
 
-export const STREAM = {
+export let STREAM = {
     ENGINEERING: 'ENGINEERING',
     OPERATIONS: 'OPERATIONS',
     PRODUCT: 'PRODUCT',
@@ -11,7 +11,7 @@ export const STREAM = {
     DESIGN: 'DESIGN',
 }
 
-export const KIND = {
+export let KIND = {
     EMPLOYEE: 'EMPLOYEE',
     DEPARTMENT: 'DEPARTMENT',
     TRIBE: 'TRIBE',
@@ -20,7 +20,7 @@ export const KIND = {
     UNIT: 'UNIT'
 }
 
-export const TYPE = {
+export let TYPE = {
     EMPLOYEE: 'EMPLOYEE',
     TEMP: 'TEMP',
     CONTRACTOR: 'CONTRACTOR',
@@ -71,6 +71,9 @@ class Organisation {
             teams: this.teamHierarchy(),
             reporting: this.reportingHierarchy(),
             rootEmployee: this.rootEmployee,
+            kinds: KIND,
+            types: TYPE,
+            streams: STREAM,
         }
     }
 
@@ -109,8 +112,12 @@ class Organisation {
             if (!employee.reportsTo) {
                 let team = teamsById[employee.memberOf]
 
-                if (team.techLead === employee.id || team.productLead === employee.id) {
-                    team = teamsById[team.parent]
+                for (const val of Object.keys(STREAM)) {
+                    const kk = val.toLowerCase()+"Lead";
+                    if (team[kk] === employee.id) {
+                        team = teamsById[team.parent]
+                        break
+                    }
                 }
 
                 if (!team) {
@@ -170,14 +177,13 @@ class Organisation {
                 hierarchy[t.parent].children.push(hierarchy[t.id])
             }
 
-            if (t.techLead && employeesById[t.techLead]) {
-                hierarchy[t.id].techLead = Object.assign({}, employeesById[t.techLead])
-            }
-
-            if (t.productLead && employeesById[t.productLead]) {
-                hierarchy[t.id].productLead = Object.assign({}, employeesById[t.productLead])
-            }
-
+            // assign leads
+            Object.keys(STREAM).forEach(val => {
+                const kk = val.toLowerCase()+"Lead"
+                if (t[kk] && employeesById[t[kk]]) {
+                    hierarchy[t.id][kk] = Object.assign({}, employeesById[t[kk]])
+                }
+            })
         })
 
         this.employees.forEach(e => {
@@ -218,17 +224,17 @@ class Organisation {
                 return (a.name > b.name) ? 1 : -1
             }),
             rootEmployee: this.rootEmployee,
+            streams: Object.values(STREAM),
+            types: Object.values(TYPE),
+            kinds: Object.values(KIND),
         }, null, 2)
     }
 
     fromJSON(jsonString) {
-
         try {
-
             const data = JSON.parse(jsonString)
 
             this.parseData(data)
-
         } catch(err) {
             alert("JSON.parse error, check console")
         }
@@ -236,10 +242,33 @@ class Organisation {
 
     parseData(data) {
         this.employees = data.employees.map(e => Object.assign(new Employee(), e))
-        this.teams = data.teams.map(e => Object.assign(new Team(), e))
-
+        this.teams = data.teams.map(e => {
+            const o = Object.assign(new Team(), e)
+            if (o.techLead) {
+                o.engineeringLead = o.techLead
+            }
+            delete o.techLead
+            return o
+        })
         this.rootEmployee = data.rootEmployee || "damon_petta";
 
+        if (data.streams) {
+            for (const val of data.streams) {
+                STREAM[val.toUpperCase()] = val.toUpperCase()
+            }
+        }
+
+        if (data.types) {
+            for (const val of data.types) {
+                TYPE[val.toUpperCase()] = val.toUpperCase()
+            }
+        }
+
+        if (data.kinds) {
+            for (const val of data.kinds) {
+                KIND[val.toUpperCase()] = val.toUpperCase()
+            }
+        }
     }
 
     changeHeadcount(team, stream, headcount) {
@@ -289,7 +318,14 @@ class Organisation {
 
         await couch.put(
             "chart",
-            {employees: this.employees, teams: this.teams},
+            {
+                employees: this.employees,
+                teams: this.teams,
+                streams: Object.values(STREAM),
+                kinds: Object.values(KIND),
+                types: Object.values(TYPE),
+                rootEmployee: this.rootEmployee,
+            },
             this.documentRevision,
         )
         .then(res => {
@@ -416,12 +452,8 @@ class Organisation {
         this.employees = this.employees.filter(e => e.id !== id)
     }
 
-    setTechLead(team, lead) {
-        this.teams.find(t => t.id === team).techLead = lead
-    }
-
-    setProductLead(team, lead) {
-        this.teams.find(t => t.id === team).productLead = lead
+    setLead(team, lead, stream) {
+        this.teams.find(t => t.id === team)[stream] = lead
     }
 }
 
@@ -478,21 +510,7 @@ export function _moveNodesToChildren(team, showMembers, showVacancies, notRecurs
 
 const findLeadUpFromFor = (team, teams, employee) => {
 
-    let searchKey
-
-    switch (employee.stream) {
-        case STREAM.PRODUCT:
-        case STREAM.DESIGN:
-        case STREAM.DATA:
-            searchKey = 'productLead'
-            break;
-        case STREAM.ENGINEERING:
-        case STREAM.OPERATIONS:
-            searchKey = 'techLead'
-            break;
-        default:
-            searchKey = 'techLead'
-    }
+    const searchKey = employee.stream.toLowerCase()+"Lead"
 
     let currentTeam = team
 

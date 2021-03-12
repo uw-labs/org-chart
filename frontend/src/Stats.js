@@ -26,42 +26,25 @@ export default class Stats extends React.Component {
                 <div><h3>New Starters</h3><StartDateList employees={employees} teams={teamsById}/></div>
                 <div><h3>Contractors</h3><NonEmployees employees={employees} teams={teamsById}/></div>
                 <div><h3>Totals</h3><TwoLevelPieChart teams={teamsFlat}/></div>
-                <div><h3>Engineering</h3><StackedBarChart teams={teamsFlat} engineering title={"Engineering"}/></div>
-                <div><h3>Product</h3><StackedBarChart teams={teamsFlat} product/></div>
-                <div><h3>Design</h3><StackedBarChart teams={teamsFlat} design/></div>
-                <div><h3>Data</h3><StackedBarChart teams={teamsFlat} data/></div>
-                <div><h3>Operations</h3><StackedBarChart teams={teamsFlat} operations/></div>
+                {Object.keys(STREAM).map(val => (
+                    <div key={"stats_for_"+val}><h3>{val}</h3><StackedBarChart teams={teamsFlat} stream={val} title={val}/></div>
+                ))}
             </div>
 
         )
     }
 }
 
-function filterMembers({engineering, operations, portfolio, product, data, design}) {
+function filterMembers(stream) {
     return member => {
-        if (engineering && member.stream === STREAM.ENGINEERING) {
-            return true
-        }
-        if (operations && member.stream === STREAM.OPERATIONS) {
-            return true
-        }
-        if (portfolio && member.stream === STREAM.PORTFOLIO) {
-            return true
-        }
-        if (product && member.stream === STREAM.PRODUCT) {
-            return true
-        }
-        if (data && member.stream === STREAM.DATA) {
-            return true
-        }
-        if (design && member.stream === STREAM.DESIGN) {
+        if (member.stream === stream) {
             return true
         }
         return false
     }
 }
 
-function countVacancies(vacancies, {engineering, operations, portfolio, product, data, design}) {
+function countVacancies(vacancies, stream) {
 
     let tally = 0
 
@@ -69,38 +52,24 @@ function countVacancies(vacancies, {engineering, operations, portfolio, product,
         return tally
     }
 
-    if (engineering && vacancies['ENGINEERING']) {
-        tally += vacancies['ENGINEERING']
+    if (vacancies[stream]) {
+        tally += vacancies[stream]
     }
-    if (operations && vacancies['OPERATIONS']) {
-        tally += vacancies['OPERATIONS']
-    }
-    if (portfolio && vacancies['PORTFOLIO']) {
-        tally += vacancies['PORTFOLIO']
-    }
-    if (product && vacancies['PRODUCT']) {
-        tally += vacancies['PRODUCT']
-    }
-    if (data && vacancies['DATA']) {
-        tally += vacancies['DATA']
-    }
-    if (design && vacancies['DESIGN']) {
-        tally += vacancies['DESIGN']
-    }
+
     if (isNaN(tally)) {
         console.log(tally, vacancies)
     }
     return tally
 }
 
-const StackedBarChart = ({teams, engineering, operations, portfolio, product, data, design, title}) => {
+const StackedBarChart = ({teams, stream, title}) => {
 
-    const memberFilter = filterMembers({engineering, operations, portfolio, product, data, design})
+    const memberFilter = filterMembers(stream)
 
     const datas = teams.map(t => {
         const members = t.members.filter(memberFilter).length
-        const vacancies = countVacancies(t.vacancies, {engineering, operations, portfolio, product, data, design})
-        const backfills = countVacancies(t.backfills, {engineering, operations, portfolio, product, data, design})
+        const vacancies = countVacancies(t.vacancies, stream)
+        const backfills = countVacancies(t.backfills, stream)
 
         if (t.name === "Technology Department" || (!vacancies && !members)) {
             return null
