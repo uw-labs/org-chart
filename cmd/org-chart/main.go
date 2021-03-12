@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/jszwec/csvutil"
 
@@ -81,8 +82,11 @@ func main() {
 				}
 
 				employeesTable := dataset.Table("employees")
+				employeesHistoryTable := dataset.Table("employees_history")
 				teamsTable := dataset.Table("teams")
+				teamsHistoryTable := dataset.Table("teams_history")
 				vacanciesTable := dataset.Table("vacancies")
+				vacanciesHistoryTable := dataset.Table("vacancies_history")
 
 				employeesSchema, err := bigquery.InferSchema(EmployeeExport{})
 
@@ -90,10 +94,36 @@ func main() {
 					return errors.Wrap(err, "inferring employee schema")
 				}
 
+				/*if err := employeesTable.Delete(ctx); err != nil {
+					if e, ok := err.(*googleapi.Error); ok && e.Code != http.StatusNotFound {
+						return errors.Wrap(err, "failed to delete emokiyees table")
+					}
+				}*/
+
 				err = employeesTable.Create(ctx, &bigquery.TableMetadata{
-					Name:                   "Employees",
-					Description:            "holds time partitioned export of Tech employees",
-					TimePartitioning:       &bigquery.TimePartitioning{},
+					Name:        "Employees",
+					Description: "holds current export of Tech employees",
+					Schema:      employeesSchema,
+				})
+
+				timer := time.NewTimer(3 * time.Second)
+				<-timer.C
+
+				if err != nil {
+					if err != nil {
+						if e, ok := err.(*googleapi.Error); ok && e.Code == http.StatusConflict {
+						} else {
+							return errors.Wrap(err, "creating employees table")
+						}
+					}
+				}
+
+				err = employeesHistoryTable.Create(ctx, &bigquery.TableMetadata{
+					Name:             "Employees History",
+					Description:      "holds time partitioned export of Tech employees",
+					TimePartitioning: &bigquery.TimePartitioning{
+						//Type: bigquery.MonthPartitioningType,
+					},
 					RequirePartitionFilter: false,
 					Schema:                 employeesSchema,
 				})
@@ -103,7 +133,7 @@ func main() {
 						if e, ok := err.(*googleapi.Error); ok && e.Code == http.StatusConflict {
 							// already exists
 						} else {
-							return errors.Wrap(err, "creating employees table")
+							return errors.Wrap(err, "creating employees history table")
 						}
 					}
 				}
@@ -114,10 +144,34 @@ func main() {
 					return errors.Wrap(err, "inferring teams schema")
 				}
 
+				/*if err := teamsTable.Delete(ctx); err != nil {
+					if e, ok := err.(*googleapi.Error); ok && e.Code != http.StatusNotFound {
+						return errors.Wrap(err, "failed to delete teamsTable")
+					}
+				}*/
+
 				err = teamsTable.Create(ctx, &bigquery.TableMetadata{
-					Name:                   "Teams",
-					Description:            "holds time partitioned export of Tech teams",
-					TimePartitioning:       &bigquery.TimePartitioning{},
+					Name:        "Teams",
+					Description: "holds export of Tech teams",
+					Schema:      teamsSchema,
+				})
+
+				timer.Reset(3 * time.Second)
+				<-timer.C
+
+				if err != nil {
+					if e, ok := err.(*googleapi.Error); ok && e.Code == http.StatusConflict {
+					} else {
+						return errors.Wrap(err, "creating teams table")
+					}
+				}
+
+				err = teamsHistoryTable.Create(ctx, &bigquery.TableMetadata{
+					Name:             "Teams History",
+					Description:      "holds time partitioned export of Tech teams",
+					TimePartitioning: &bigquery.TimePartitioning{
+						//Type: bigquery.MonthPartitioningType,
+					},
 					RequirePartitionFilter: false,
 					Schema:                 teamsSchema,
 				})
@@ -136,10 +190,35 @@ func main() {
 					return errors.Wrap(err, "inferring vacancies schema")
 				}
 
+				/*if err := vacanciesTable.Delete(ctx); err != nil {
+					if e, ok := err.(*googleapi.Error); ok && e.Code != http.StatusNotFound {
+						return errors.Wrap(err, "failed to delete vacanciesTable")
+					}
+				}*/
+
 				err = vacanciesTable.Create(ctx, &bigquery.TableMetadata{
-					Name:                   "Vacancies",
-					Description:            "holds vacancies per team",
-					TimePartitioning:       &bigquery.TimePartitioning{},
+					Name:        "Vacancies",
+					Description: "holds vacancies per team",
+					Schema:      vacanciesSchema,
+				})
+
+				timer.Reset(3 * time.Second)
+				<-timer.C
+
+				if err != nil {
+					if e, ok := err.(*googleapi.Error); ok && e.Code == http.StatusConflict {
+
+					} else {
+						return errors.Wrap(err, "creating vacancies table")
+					}
+				}
+
+				err = vacanciesHistoryTable.Create(ctx, &bigquery.TableMetadata{
+					Name:             "Vacancies History",
+					Description:      "holds partitioned vacancies per team",
+					TimePartitioning: &bigquery.TimePartitioning{
+						//Type: bigquery.MonthPartitioningType,
+					},
 					RequirePartitionFilter: false,
 					Schema:                 vacanciesSchema,
 				})
@@ -161,19 +240,81 @@ func main() {
 				employeesInserter := employeesTable.Inserter()
 
 				if err := employeesInserter.Put(ctx, orgChart.employeeExports()); err != nil {
+					if multiError, ok := err.(bigquery.PutMultiError); ok {
+						for _, err1 := range multiError {
+							for _, err2 := range err1.Errors {
+								fmt.Println(err2)
+							}
+						}
+					}
 					return errors.Wrap(err, "inserting employees")
+				}
+
+				employeesHistoryInserter := employeesHistoryTable.Inserter()
+
+				if err := employeesHistoryInserter.Put(ctx, orgChart.employeeExports()); err != nil {
+					if multiError, ok := err.(bigquery.PutMultiError); ok {
+						for _, err1 := range multiError {
+							for _, err2 := range err1.Errors {
+								fmt.Println(err2)
+							}
+						}
+					}
+					return errors.Wrap(err, "inserting employeesHistory")
 				}
 
 				teamsInserter := teamsTable.Inserter()
 
 				if err := teamsInserter.Put(ctx, orgChart.teamExports()); err != nil {
+
+					if multiError, ok := err.(bigquery.PutMultiError); ok {
+						for _, err1 := range multiError {
+							for _, err2 := range err1.Errors {
+								fmt.Println(err2)
+							}
+						}
+					}
 					return errors.Wrap(err, "inserting teams")
+				}
+
+				teamsHistoryInserter := teamsHistoryTable.Inserter()
+
+				if err := teamsHistoryInserter.Put(ctx, orgChart.teamExports()); err != nil {
+
+					if multiError, ok := err.(bigquery.PutMultiError); ok {
+						for _, err1 := range multiError {
+							for _, err2 := range err1.Errors {
+								fmt.Println(err2)
+							}
+						}
+					}
+					return errors.Wrap(err, "inserting teamsHistory")
 				}
 
 				vacanciesInserter := vacanciesTable.Inserter()
 
 				if err := vacanciesInserter.Put(ctx, orgChart.vacanciesExports()); err != nil {
+					if multiError, ok := err.(bigquery.PutMultiError); ok {
+						for _, err1 := range multiError {
+							for _, err2 := range err1.Errors {
+								fmt.Println(err2)
+							}
+						}
+					}
 					return errors.Wrap(err, "inserting vacancies")
+				}
+
+				vacanciesHistoryInserter := vacanciesHistoryTable.Inserter()
+
+				if err := vacanciesHistoryInserter.Put(ctx, orgChart.vacanciesExports()); err != nil {
+					if multiError, ok := err.(bigquery.PutMultiError); ok {
+						for _, err1 := range multiError {
+							for _, err2 := range err1.Errors {
+								fmt.Println(err2)
+							}
+						}
+					}
+					return errors.Wrap(err, "inserting vacanciesHistory")
 				}
 
 				return nil
@@ -437,11 +578,9 @@ type Team struct {
 }
 
 type TeamExport struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	Parents       string `json:"parents"`
-	TeachLeadID   string `json:"techLead"`
-	ProductLeadID string `json:"productLead"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Parents string `json:"parents"`
 }
 
 type VacancyExport struct {
@@ -504,11 +643,9 @@ func (oc *OrgChart) teamExports() []*TeamExport {
 	tms := []*TeamExport{}
 	for _, t := range oc.Teams {
 		tms = append(tms, &TeamExport{
-			ID:            t.ID,
-			Name:          t.Name,
-			Parents:       oc.teamAncestryString(t, false),
-			TeachLeadID:   oc.techLead(t).ID,
-			ProductLeadID: oc.productLead(t).ID,
+			ID:      t.ID,
+			Name:    t.Name,
+			Parents: oc.teamAncestryString(t, false),
 		})
 	}
 	return tms
