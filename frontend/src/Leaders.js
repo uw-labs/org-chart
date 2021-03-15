@@ -74,12 +74,14 @@ export default class Leaders extends React.Component {
                     <TableBody displayRowCheckbox={false}>
                             {flatten.map(t => (
                                 <TableRow key={`${t.id}`}>
-                                    <TableRowColumn key={`${t.id}`} style={{paddingLeft: `${20*t.parents.length+20}px`}}>
+                                    <TableRowColumn key={`${t.id}`} style={{paddingLeft: `${20*t.parents.length+20}px`}} title={t.name}>
                                         {t.name}
                                     </TableRowColumn>
-                                    {Object.keys(STREAM).map(val => (
-                                        <TableRowColumn style={{opacity: t[val.toLowerCase()+"Lead"] ? 1 : 0.5}} key={`${val}${t.id}`}>{findLeadNameUpwards(t, byId, val.toLowerCase()+"Lead")}</TableRowColumn>
-                                    ))}
+                                    {Object.keys(STREAM).map(val => {
+                                      const leadName = findLeadNameUpwards(t, byId, val.toLowerCase()+"Lead")
+                                      return (
+                                        <TableRowColumn style={{opacity: t[val.toLowerCase()+"Lead"] ? 1 : 0.5}} key={`${val}${t.id}`} title={leadName}>{leadName}</TableRowColumn>
+                                    )})}
                                 </TableRow>
                             ))}
                     </TableBody>
